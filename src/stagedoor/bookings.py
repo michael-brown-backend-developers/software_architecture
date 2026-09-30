@@ -3,15 +3,9 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import fakestripe
-
 from stagedoor.capacity import check_places, take_places
 from stagedoor.catalogue import get_item
-from stagedoor.exceptions import (
-    EmptyBookingError,
-    InvalidQuantityError,
-    PaymentFailedError,
-)
+from stagedoor.exceptions import EmptyBookingError, InvalidQuantityError
 from stagedoor.models import Booking, BookingLine, Customer
 from stagedoor.notifications import send_confirmation
 from stagedoor.payments import get_payment_method
@@ -42,19 +36,7 @@ def place_booking(
     lines = [_booking_line(code, quantity) for code, quantity in items]
     check_places(lines)
     totals = price_booking(lines, discount_code, delivery)
-
-    # Take the payment, and tell the customer in plain words if it failed.
-    try:
-        result = method.charge(totals.total, booking_id, payment_token)
-    except fakestripe.error.CardError as error:
-        raise PaymentFailedError(error.user_message) from error
-    if isinstance(result, dict):
-        # PayPal answers with a dictionary, and a failure is not an error.
-        if result["status"] != "COMPLETED":
-            raise PaymentFailedError("PayPal declined the payment.")
-        payment_reference = result["id"]
-    else:
-        payment_reference = result
+    payment = method.charge(totals.total, booking_id, payment_token)
 
     booking = Booking(
         id=booking_id,
@@ -68,7 +50,8 @@ def place_booking(
         total=totals.total,
         vat=totals.vat,
         payment_method=payment_method,
-        payment_reference=payment_reference,
+        payment_reference=payment.reference,
+        payment_status=payment.status,
         payment_fee=method.fee(totals.total),
         placed_at=datetime.now(UTC),
     )

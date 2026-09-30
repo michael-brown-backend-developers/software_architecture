@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Delivery ({booking.delivery}): £{booking.delivery_fee}")
             print(f"Total: £{booking.total} (includes VAT of £{booking.vat})")
             print(
-                f"Paid by {booking.payment_method}"
+                f"Payment: {booking.payment_method}, {booking.payment_status}"
                 f" ({booking.payment_reference}), fee £{booking.payment_fee}"
             )
 

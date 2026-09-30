@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from stagedoor.exceptions import BookingNotFoundError
-from stagedoor.models import Booking, BookingLine, Customer, ItemKind
+from stagedoor.models import (
+    Booking,
+    BookingLine,
+    Customer,
+    ItemKind,
+    PaymentStatus,
+)
 
 
 def _bookings_dir() -> Path:
@@ -62,6 +68,7 @@ def _to_dict(booking: Booking) -> dict[str, Any]:
         "vat": str(booking.vat),
         "payment_method": booking.payment_method,
         "payment_reference": booking.payment_reference,
+        "payment_status": booking.payment_status.value,
         "payment_fee": str(booking.payment_fee),
         "placed_at": booking.placed_at.isoformat(),
     }
@@ -91,6 +98,7 @@ def _from_dict(data: dict[str, Any]) -> Booking:
         vat=Decimal(data["vat"]),
         payment_method=data["payment_method"],
         payment_reference=data["payment_reference"],
+        payment_status=PaymentStatus(data["payment_status"]),
         payment_fee=Decimal(data["payment_fee"]),
         placed_at=datetime.fromisoformat(data["placed_at"]),
     )

@@ -1,0 +1,31 @@
+"""Paying by bank transfer, quoting a reference we give the customer.
+
+No money changes hands when the booking is made, so the payment is
+awaiting payment until the customer's transfer arrives.
+"""
+
+from decimal import Decimal
+
+from stagedoor.models import Booking, PaymentStatus
+from stagedoor.payments.base import PaymentResult
+
+
+class BankTransferPayment:
+    """Paying by bank transfer."""
+
+    def charge(
+        self, amount: Decimal, booking_id: str, token: str | None
+    ) -> PaymentResult:
+        return PaymentResult(
+            reference=f"SD-{booking_id.upper()}",
+            status=PaymentStatus.AWAITING_PAYMENT,
+        )
+
+    def fee(self, amount: Decimal) -> Decimal:
+        return Decimal("0.00")
+
+    def describe(self, booking: Booking) -> str:
+        return (
+            f"Please pay £{booking.total} by bank transfer to sort code "
+            f"12-34-56, account 12345678, quoting {booking.payment_reference}."
+        )

@@ -1,54 +1,81 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-import fakestripe
 import pytest
 
 from stagedoor.exceptions import (
     MissingPaymentTokenError,
+    PaymentFailedError,
     UnknownPaymentMethodError,
 )
-from stagedoor.models import Booking, Customer
-from stagedoor.payments import (
-    BankTransferPayment,
-    CardPayment,
-    PayPalPayment,
-    get_payment_method,
-)
+from stagedoor.models import Booking, Customer, PaymentStatus
+from stagedoor.payments import get_payment_method
+from stagedoor.payments.bank_transfer import BankTransferPayment
+from stagedoor.payments.paypal import PayPalPayment
+from stagedoor.payments.stripe import StripeCardPayment, to_pence
 
 AMOUNT = Decimal("63.00")
 
 
-def test_paying_by_card() -> None:
-    card = CardPayment(api_key="sk_test")
+@pytest.mark.parametrize(
+    ("amount", "pence"),
+    [
+        (Decimal("80.53"), 8053),
+        (Decimal("0.10"), 10),
+        (Decimal("12.99"), 1299),
+        (Decimal("100.00"), 10000),
+    ],
+)
+def test_to_pence(amount: Decimal, pence: int) -> None:
+    assert to_pence(amount) == pence
 
-    assert card.charge(AMOUNT, "abc123", "pm_card_visa").startswith("pi_")
+
+def test_paying_by_card() -> None:
+    card = StripeCardPayment(api_key="sk_test")
+
+    result = card.charge(AMOUNT, "abc123", "pm_card_visa")
+
+    assert result.reference.startswith("pi_")
+    assert result.status == PaymentStatus.PAID
     assert card.fee(AMOUNT) == Decimal("1.15")
 
 
-def test_a_declined_card_raises_stripes_own_error() -> None:
-    card = CardPayment(api_key="sk_test")
+def test_a_declined_card_says_why_in_our_words() -> None:
+    card = StripeCardPayment(api_key="sk_test")
 
-    with pytest.raises(fakestripe.error.CardError):
+    with pytest.raises(PaymentFailedError, match="Your card was declined."):
         card.charge(AMOUNT, "abc123", "pm_card_declined")
 
 
 def test_a_card_needs_a_token() -> None:
     with pytest.raises(MissingPaymentTokenError):
-        CardPayment(api_key="sk_test").charge(AMOUNT, "abc123", None)
+        StripeCardPayment(api_key="sk_test").charge(AMOUNT, "abc123", None)
 
 
 def test_paying_with_paypal() -> None:
     paypal = PayPalPayment(client_id="id", secret="secret")
 
-    assert paypal.charge(AMOUNT, "abc123", "payer_ok")["status"] == "COMPLETED"
+    result = paypal.charge(AMOUNT, "abc123", "payer_ok")
+
+    assert result.reference.startswith("PAYID-")
+    assert result.status == PaymentStatus.PAID
     assert paypal.fee(AMOUNT) == Decimal("2.13")
+
+
+def test_a_declined_paypal_payment_is_a_failure_not_an_answer() -> None:
+    paypal = PayPalPayment(client_id="id", secret="secret")
+
+    with pytest.raises(PaymentFailedError, match="PayPal declined"):
+        paypal.charge(AMOUNT, "abc123", "payer_declined")
 
 
 def test_paying_by_bank_transfer() -> None:
     transfer = BankTransferPayment()
 
-    assert transfer.charge(AMOUNT, "abc123", None) == "SD-ABC123"
+    result = transfer.charge(AMOUNT, "abc123", None)
+
+    assert result.reference == "SD-ABC123"
+    assert result.status == PaymentStatus.AWAITING_PAYMENT
     assert transfer.fee(AMOUNT) == Decimal("0.00")
 
 
@@ -66,6 +93,7 @@ def test_a_bank_transfer_tells_the_customer_how_to_pay(ada: Customer) -> None:
         vat=Decimal("0.00"),
         payment_method="bank_transfer",
         payment_reference="SD-ABC123",
+        payment_status=PaymentStatus.AWAITING_PAYMENT,
         payment_fee=Decimal("0.00"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
     )

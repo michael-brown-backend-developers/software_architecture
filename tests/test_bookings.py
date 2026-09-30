@@ -13,7 +13,7 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.models import Customer
+from stagedoor.models import Customer, PaymentStatus
 from stagedoor.storage import load_booking
 
 
@@ -125,6 +125,7 @@ def test_the_booking_records_its_payment(ada: Customer) -> None:
 
     assert booking.payment_method == "card"
     assert booking.payment_reference.startswith("pi_")
+    assert booking.payment_status == PaymentStatus.PAID
     assert booking.payment_fee == Decimal("0.47")
 
 
@@ -154,3 +155,9 @@ def test_a_declined_paypal_payment_says_why_and_books_nothing(
 
     assert not (isolated_directories / "data").exists()
     assert PLACES["GDF0320"] == 2
+
+
+def test_a_bank_transfer_booking_is_awaiting_payment(ada: Customer) -> None:
+    booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+
+    assert booking.payment_status == PaymentStatus.AWAITING_PAYMENT

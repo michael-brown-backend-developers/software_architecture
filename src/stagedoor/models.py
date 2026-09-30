@@ -14,6 +14,13 @@ class ItemKind(StrEnum):
     MERCH = "merch"
 
 
+class PaymentStatus(StrEnum):
+    """Whether the customer's money has arrived."""
+
+    PAID = "paid"
+    AWAITING_PAYMENT = "awaiting_payment"
+
+
 @dataclass(frozen=True)
 class Item:
     """Something we sell. The price includes VAT.
@@ -73,5 +80,6 @@ class Booking:
     vat: Decimal
     payment_method: str
     payment_reference: str
+    payment_status: PaymentStatus
     payment_fee: Decimal
     placed_at: datetime
