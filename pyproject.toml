@@ -10,7 +10,11 @@ dependencies = []
 stagedoor = "stagedoor.cli:main"
 
 [tool.poetry]
-packages = [{ include = "stagedoor", from = "src" }]
+packages = [
+    { include = "stagedoor", from = "src" },
+    { include = "fakestripe", from = "src" },
+    { include = "fakepaypal", from = "src" },
+]
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
