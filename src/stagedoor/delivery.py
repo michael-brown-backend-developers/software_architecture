@@ -1,8 +1,11 @@
 """What getting a booking to the customer costs.
 
-Delivery prices include VAT, like everything else we sell.
+Each delivery option is priced by a function that takes the value of the
+goods and returns the cost of delivering them. Delivery prices include
+VAT, like everything else we sell.
 """
 
+from collections.abc import Callable
 from decimal import Decimal
 
 from stagedoor.exceptions import UnknownDeliveryOptionError
@@ -10,14 +13,31 @@ from stagedoor.exceptions import UnknownDeliveryOptionError
 FREE_POST_FROM = Decimal("100.00")
 
 
+def e_ticket_delivery(goods_total: Decimal) -> Decimal:
+    return Decimal("0.00")
+
+
+def box_office_delivery(goods_total: Decimal) -> Decimal:
+    return Decimal("0.00")
+
+
+def post_delivery(goods_total: Decimal) -> Decimal:
+    if goods_total >= FREE_POST_FROM:
+        return Decimal("0.00")
+    return Decimal("2.50")
+
+
+DELIVERY_PRICING: dict[str, Callable[[Decimal], Decimal]] = {
+    "e_ticket": e_ticket_delivery,
+    "box_office": box_office_delivery,
+    "post": post_delivery,
+}
+
+
 def delivery_cost(delivery: str, goods_total: Decimal) -> Decimal:
     """The price of a delivery option, for goods costing ``goods_total``."""
-    if delivery == "e_ticket":
-        return Decimal("0.00")
-    elif delivery == "box_office":
-        return Decimal("0.00")
-    elif delivery == "post":
-        if goods_total >= FREE_POST_FROM:
-            return Decimal("0.00")
-        return Decimal("2.50")
-    raise UnknownDeliveryOptionError(delivery)
+    try:
+        price = DELIVERY_PRICING[delivery]
+    except KeyError:
+        raise UnknownDeliveryOptionError(delivery) from None
+    return price(goods_total)

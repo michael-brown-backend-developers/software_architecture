@@ -12,6 +12,7 @@ import sys
 
 from stagedoor.bookings import place_booking
 from stagedoor.catalogue import list_items
+from stagedoor.delivery import DELIVERY_PRICING
 from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Customer
 from stagedoor.payments import PAYMENT_METHODS
@@ -43,7 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
     book.add_argument(
         "--delivery",
         default="e_ticket",
-        choices=["e_ticket", "box_office", "post"],
+        choices=DELIVERY_PRICING,
     )
     book.add_argument(
         "items", nargs="+", type=_parse_item, metavar="CODE[:QUANTITY]"
