@@ -14,6 +14,7 @@ from stagedoor.bookings import place_booking
 from stagedoor.catalogue import list_items
 from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Customer
+from stagedoor.payments import PAYMENT_METHODS
 from stagedoor.storage import load_booking
 
 
@@ -36,9 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
     book = commands.add_parser("book", help="make a booking")
     book.add_argument("--name", required=True)
     book.add_argument("--email", required=True)
-    book.add_argument(
-        "--pay", required=True, choices=["card", "paypal", "bank_transfer"]
-    )
+    book.add_argument("--pay", required=True, choices=PAYMENT_METHODS)
     book.add_argument("--token", help="card or PayPal payment token")
     book.add_argument("--discount", metavar="CODE")
     book.add_argument(

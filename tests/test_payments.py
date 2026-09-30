@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import fakestripe
@@ -7,51 +8,74 @@ from stagedoor.exceptions import (
     MissingPaymentTokenError,
     UnknownPaymentMethodError,
 )
-from stagedoor.payments import payment_fee, take_payment
+from stagedoor.models import Booking, Customer
+from stagedoor.payments import (
+    BankTransferPayment,
+    CardPayment,
+    PayPalPayment,
+    get_payment_method,
+)
+
+AMOUNT = Decimal("63.00")
 
 
 def test_paying_by_card() -> None:
-    reference = take_payment(
-        "card", Decimal("63.00"), "abc123", "pm_card_visa"
-    )
+    card = CardPayment(api_key="sk_test")
 
-    assert reference.startswith("pi_")
+    assert card.charge(AMOUNT, "abc123", "pm_card_visa").startswith("pi_")
+    assert card.fee(AMOUNT) == Decimal("1.15")
 
 
 def test_a_declined_card_raises_stripes_own_error() -> None:
+    card = CardPayment(api_key="sk_test")
+
     with pytest.raises(fakestripe.error.CardError):
-        take_payment("card", Decimal("63.00"), "abc123", "pm_card_declined")
-
-
-def test_paying_with_paypal() -> None:
-    reference = take_payment("paypal", Decimal("63.00"), "abc123", "payer_ok")
-
-    assert reference.startswith("PAYID-")
-
-
-def test_paying_by_bank_transfer() -> None:
-    reference = take_payment("bank_transfer", Decimal("63.00"), "abc123", None)
-
-    assert reference == "SD-ABC123"
+        card.charge(AMOUNT, "abc123", "pm_card_declined")
 
 
 def test_a_card_needs_a_token() -> None:
     with pytest.raises(MissingPaymentTokenError):
-        take_payment("card", Decimal("63.00"), "abc123", None)
+        CardPayment(api_key="sk_test").charge(AMOUNT, "abc123", None)
+
+
+def test_paying_with_paypal() -> None:
+    paypal = PayPalPayment(client_id="id", secret="secret")
+
+    assert paypal.charge(AMOUNT, "abc123", "payer_ok").startswith("PAYID-")
+    assert paypal.fee(AMOUNT) == Decimal("2.13")
+
+
+def test_paying_by_bank_transfer() -> None:
+    transfer = BankTransferPayment()
+
+    assert transfer.charge(AMOUNT, "abc123", None) == "SD-ABC123"
+    assert transfer.fee(AMOUNT) == Decimal("0.00")
+
+
+def test_a_bank_transfer_tells_the_customer_how_to_pay(ada: Customer) -> None:
+    booking = Booking(
+        id="abc123",
+        customer=ada,
+        lines=(),
+        discount_code=None,
+        subtotal=AMOUNT,
+        discount=Decimal("0.00"),
+        delivery="e_ticket",
+        delivery_fee=Decimal("0.00"),
+        total=AMOUNT,
+        vat=Decimal("0.00"),
+        payment_method="bank_transfer",
+        payment_reference="SD-ABC123",
+        payment_fee=Decimal("0.00"),
+        placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
+    )
+
+    description = BankTransferPayment().describe(booking)
+
+    assert "Please pay £63.00" in description
+    assert "quoting SD-ABC123" in description
 
 
 def test_an_unknown_payment_method_is_rejected() -> None:
     with pytest.raises(UnknownPaymentMethodError):
-        take_payment("cash", Decimal("63.00"), "abc123", None)
-
-
-@pytest.mark.parametrize(
-    ("method", "fee"),
-    [
-        ("card", Decimal("1.15")),
-        ("paypal", Decimal("2.13")),
-        ("bank_transfer", Decimal("0.00")),
-    ],
-)
-def test_payment_fees(method: str, fee: Decimal) -> None:
-    assert payment_fee(method, Decimal("63.00")) == fee
+        get_payment_method("cash")

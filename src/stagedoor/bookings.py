@@ -8,7 +8,7 @@ from stagedoor.catalogue import get_item
 from stagedoor.exceptions import EmptyBookingError, InvalidQuantityError
 from stagedoor.models import Booking, BookingLine, Customer
 from stagedoor.notifications import send_confirmation
-from stagedoor.payments import payment_fee, take_payment
+from stagedoor.payments import get_payment_method
 from stagedoor.pricing import price_booking
 from stagedoor.storage import save_booking
 
@@ -31,13 +31,12 @@ def place_booking(
     # Payment needs a reference before the booking exists, so the ID comes
     # first.
     booking_id = uuid4().hex[:12]
+    method = get_payment_method(payment_method)
 
     lines = [_booking_line(code, quantity) for code, quantity in items]
     check_places(lines)
     totals = price_booking(lines, discount_code, delivery)
-    payment_reference = take_payment(
-        payment_method, totals.total, booking_id, payment_token
-    )
+    payment_reference = method.charge(totals.total, booking_id, payment_token)
 
     booking = Booking(
         id=booking_id,
@@ -52,7 +51,7 @@ def place_booking(
         vat=totals.vat,
         payment_method=payment_method,
         payment_reference=payment_reference,
-        payment_fee=payment_fee(payment_method, totals.total),
+        payment_fee=method.fee(totals.total),
         placed_at=datetime.now(UTC),
     )
 

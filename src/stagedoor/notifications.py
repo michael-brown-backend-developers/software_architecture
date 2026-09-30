@@ -9,8 +9,8 @@ what the customer would have received.
 import os
 from pathlib import Path
 
-from stagedoor.exceptions import UnknownPaymentMethodError
 from stagedoor.models import Booking
+from stagedoor.payments import get_payment_method
 
 
 def _mail_dir() -> Path:
@@ -32,17 +32,7 @@ def send_confirmation(booking: Booking) -> None:
             f"Discount ({booking.discount_code}): -£{booking.discount}\n"
         )
 
-    if booking.payment_method == "card":
-        payment = "Paid by card."
-    elif booking.payment_method == "paypal":
-        payment = "Paid with PayPal."
-    elif booking.payment_method == "bank_transfer":
-        payment = (
-            f"Please pay £{booking.total} by bank transfer to sort code "
-            f"12-34-56, account 12345678, quoting {booking.payment_reference}."
-        )
-    else:
-        raise UnknownPaymentMethodError(booking.payment_method)
+    payment = get_payment_method(booking.payment_method).describe(booking)
 
     body = (
         f"To: {booking.customer.email}\n"
