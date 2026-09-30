@@ -35,6 +35,10 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.isort]
+# They live in src/, but they stand in for other people's libraries.
+known-third-party = ["fakestripe", "fakepaypal"]
+
 [dependency-groups]
 dev = [
     "pytest (>=9.1.1,<10.0.0)",

@@ -32,9 +32,15 @@ Then:
 
 ```bash
 poetry run stagedoor whats-on
-poetry run stagedoor book --name Ada --email ada@example.com MUC0314-ADULT:2 PROG-MUCHADO
+poetry run stagedoor book --name Ada --email ada@example.com \
+    --pay card --token pm_card_visa MUC0314-ADULT:2 PROG-MUCHADO
 poetry run stagedoor booking <booking id>
 ```
+
+You can pay by `card` (with a token such as `pm_card_visa`), `paypal` (with
+a payer such as `payer_ok`) or `bank_transfer`, and choose `--delivery
+e_ticket`, `box_office` or `post`. Payments go through `fakestripe` and
+`fakepaypal`, stand-ins for real providers that need no network.
 
 Bookings are written to `./data/bookings/` and confirmations to `./mail/`.
 Set `STAGEDOOR_DATA_DIR` and `STAGEDOOR_MAIL_DIR` to put them somewhere else.

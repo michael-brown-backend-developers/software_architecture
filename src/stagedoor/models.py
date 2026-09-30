@@ -57,8 +57,8 @@ class BookingLine:
 class Booking:
     """A customer's booking.
 
-    ``total`` is ``subtotal`` minus ``discount``. ``vat`` is the VAT
-    included in ``total``, not added to it.
+    ``total`` is ``subtotal`` minus ``discount``, plus ``delivery_fee``.
+    ``vat`` is the VAT included in ``total``, not added to it.
     """
 
     id: str
@@ -67,6 +67,11 @@ class Booking:
     discount_code: str | None
     subtotal: Decimal
     discount: Decimal
+    delivery: str
+    delivery_fee: Decimal
     total: Decimal
     vat: Decimal
+    payment_method: str
+    payment_reference: str
+    payment_fee: Decimal
     placed_at: datetime

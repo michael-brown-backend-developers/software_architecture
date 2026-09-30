@@ -60,3 +60,27 @@ class BookingNotFoundError(StageDoorError):
     def __init__(self, booking_id: str) -> None:
         super().__init__(f"No booking with ID {booking_id!r}")
         self.booking_id = booking_id
+
+
+class UnknownPaymentMethodError(StageDoorError):
+    """We do not take payment this way."""
+
+    def __init__(self, method: str) -> None:
+        super().__init__(f"No payment method {method!r}")
+        self.method = method
+
+
+class MissingPaymentTokenError(StageDoorError):
+    """This payment method needs a token, and none was given."""
+
+    def __init__(self, method: str) -> None:
+        super().__init__(f"Paying by {method} needs a payment token")
+        self.method = method
+
+
+class UnknownDeliveryOptionError(StageDoorError):
+    """We do not deliver this way."""
+
+    def __init__(self, delivery: str) -> None:
+        super().__init__(f"No delivery option {delivery!r}")
+        self.delivery = delivery

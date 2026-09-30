@@ -36,7 +36,16 @@ def _build_parser() -> argparse.ArgumentParser:
     book = commands.add_parser("book", help="make a booking")
     book.add_argument("--name", required=True)
     book.add_argument("--email", required=True)
+    book.add_argument(
+        "--pay", required=True, choices=["card", "paypal", "bank_transfer"]
+    )
+    book.add_argument("--token", help="card or PayPal payment token")
     book.add_argument("--discount", metavar="CODE")
+    book.add_argument(
+        "--delivery",
+        default="e_ticket",
+        choices=["e_ticket", "box_office", "post"],
+    )
     book.add_argument(
         "items", nargs="+", type=_parse_item, metavar="CODE[:QUANTITY]"
     )
@@ -59,7 +68,10 @@ def main(argv: list[str] | None = None) -> int:
             booking = place_booking(
                 Customer(name=args.name, email=args.email),
                 args.items,
+                payment_method=args.pay,
+                payment_token=args.token,
                 discount_code=args.discount,
+                delivery=args.delivery,
             )
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 
@@ -77,7 +89,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"Discount ({booking.discount_code}): -£{booking.discount}"
                 )
+            print(f"Delivery ({booking.delivery}): £{booking.delivery_fee}")
             print(f"Total: £{booking.total} (includes VAT of £{booking.vat})")
+            print(
+                f"Paid by {booking.payment_method}"
+                f" ({booking.payment_reference}), fee £{booking.payment_fee}"
+            )
 
     except StageDoorError as error:
         print(f"Error: {error}", file=sys.stderr)

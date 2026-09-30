@@ -56,8 +56,13 @@ def _to_dict(booking: Booking) -> dict[str, Any]:
         "discount_code": booking.discount_code,
         "subtotal": str(booking.subtotal),
         "discount": str(booking.discount),
+        "delivery": booking.delivery,
+        "delivery_fee": str(booking.delivery_fee),
         "total": str(booking.total),
         "vat": str(booking.vat),
+        "payment_method": booking.payment_method,
+        "payment_reference": booking.payment_reference,
+        "payment_fee": str(booking.payment_fee),
         "placed_at": booking.placed_at.isoformat(),
     }
 
@@ -80,7 +85,12 @@ def _from_dict(data: dict[str, Any]) -> Booking:
         discount_code=data["discount_code"],
         subtotal=Decimal(data["subtotal"]),
         discount=Decimal(data["discount"]),
+        delivery=data["delivery"],
+        delivery_fee=Decimal(data["delivery_fee"]),
         total=Decimal(data["total"]),
         vat=Decimal(data["vat"]),
+        payment_method=data["payment_method"],
+        payment_reference=data["payment_reference"],
+        payment_fee=Decimal(data["payment_fee"]),
         placed_at=datetime.fromisoformat(data["placed_at"]),
     )

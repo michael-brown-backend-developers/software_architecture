@@ -25,8 +25,13 @@ def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
         discount_code="FIRSTNIGHT10",
         subtotal=Decimal("64.00"),
         discount=Decimal("6.40"),
-        total=Decimal("57.60"),
-        vat=Decimal("9.60"),
+        delivery="post",
+        delivery_fee=Decimal("2.50"),
+        total=Decimal("60.10"),
+        vat=Decimal("10.02"),
+        payment_method="card",
+        payment_reference="pi_123",
+        payment_fee=Decimal("1.10"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
     )
 

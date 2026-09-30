@@ -15,8 +15,8 @@ def test_a_booking_can_be_made_and_shown(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     main(
-        "book --name Ada --email ada@example.com"
-        " MUC0314-ADULT:2 PROG-MUCHADO".split()
+        "book --name Ada --email ada@example.com --pay card"
+        " --token pm_card_visa MUC0314-ADULT:2 PROG-MUCHADO".split()
     )
     made = capsys.readouterr().out
     booking_id = made.split()[1]

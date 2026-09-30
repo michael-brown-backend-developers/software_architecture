@@ -44,15 +44,16 @@ def test_vat_included(gross: Decimal, rate: Decimal, vat: Decimal) -> None:
 
 
 def test_programmes_are_zero_rated() -> None:
-    totals = price_booking([PROGRAMME, PROGRAMME], None)
+    totals = price_booking([PROGRAMME, PROGRAMME], None, "e_ticket")
 
     assert totals.vat == Decimal("0.00")
 
 
 def test_no_discount_code() -> None:
-    assert price_booking([TEE], None) == Totals(
+    assert price_booking([TEE], None, "e_ticket") == Totals(
         subtotal=Decimal("18.00"),
         discount=Decimal("0.00"),
+        delivery_fee=Decimal("0.00"),
         total=Decimal("18.00"),
         vat=Decimal("3.00"),
     )
@@ -61,11 +62,11 @@ def test_no_discount_code() -> None:
 def test_vat_is_worked_out_after_the_discount() -> None:
     # The tickets cost £57.60 after 10% off, which includes £9.60 of VAT.
     # The programme adds none.
-    assert price_booking(
-        [MUCH_ADO, MUCH_ADO, PROGRAMME], "FIRSTNIGHT10"
-    ) == Totals(
+    lines = [MUCH_ADO, MUCH_ADO, PROGRAMME]
+    assert price_booking(lines, "FIRSTNIGHT10", "e_ticket") == Totals(
         subtotal=Decimal("70.00"),
         discount=Decimal("7.00"),
+        delivery_fee=Decimal("0.00"),
         total=Decimal("63.00"),
         vat=Decimal("9.60"),
     )
@@ -73,9 +74,10 @@ def test_vat_is_worked_out_after_the_discount() -> None:
 
 def test_staff_discount() -> None:
     # £19.875 after 25% off; the VAT in that is £3.3125, to the penny.
-    assert price_booking([GUIDO_FATHER], "STAFF25") == Totals(
+    assert price_booking([GUIDO_FATHER], "STAFF25", "e_ticket") == Totals(
         subtotal=Decimal("26.50"),
         discount=Decimal("6.63"),
+        delivery_fee=Decimal("0.00"),
         total=Decimal("19.87"),
         vat=Decimal("3.31"),
     )
@@ -83,4 +85,23 @@ def test_staff_discount() -> None:
 
 def test_an_unknown_discount_code_is_rejected() -> None:
     with pytest.raises(UnknownDiscountCodeError):
-        price_booking([TEE], "FREESTUFF")
+        price_booking([TEE], "FREESTUFF", "e_ticket")
+
+
+def test_postage_is_added_to_the_total_and_carries_vat() -> None:
+    # Posting the tickets costs £2.50, which includes £0.42 of VAT.
+    assert price_booking([TEE], None, "post") == Totals(
+        subtotal=Decimal("18.00"),
+        discount=Decimal("0.00"),
+        delivery_fee=Decimal("2.50"),
+        total=Decimal("20.50"),
+        vat=Decimal("3.42"),
+    )
+
+
+def test_free_postage_is_judged_after_the_discount() -> None:
+    # £102.00 of goods is £91.80 after 10% off: not enough for free postage.
+    lines = [MUCH_ADO, MUCH_ADO, MUCH_ADO, PROGRAMME]
+    totals = price_booking(lines, "FIRSTNIGHT10", "post")
+
+    assert totals.delivery_fee == Decimal("2.50")
