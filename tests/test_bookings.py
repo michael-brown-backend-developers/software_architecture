@@ -9,6 +9,7 @@ from stagedoor.exceptions import (
     EmptyBookingError,
     InvalidQuantityError,
     NotEnoughPlacesError,
+    PaymentFailedError,
     UnknownDiscountCodeError,
     UnknownItemError,
 )
@@ -136,3 +137,20 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
         isolated_directories / "mail" / f"{booking.id}-confirmation.txt"
     )
     assert f"quoting SD-{booking.id.upper()}" in confirmation.read_text()
+
+
+def test_a_declined_card_says_why_and_books_nothing(ada: Customer) -> None:
+    with pytest.raises(PaymentFailedError, match="Your card was declined."):
+        place_booking(ada, [("GDF0320-ADULT", 1)], "card", "pm_card_declined")
+
+    assert PLACES["GDF0320"] == 2
+
+
+def test_a_declined_paypal_payment_says_why_and_books_nothing(
+    ada: Customer, isolated_directories: Path
+) -> None:
+    with pytest.raises(PaymentFailedError, match="PayPal declined"):
+        place_booking(ada, [("GDF0320-ADULT", 1)], "paypal", "payer_declined")
+
+    assert not (isolated_directories / "data").exists()
+    assert PLACES["GDF0320"] == 2

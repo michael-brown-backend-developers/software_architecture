@@ -84,3 +84,11 @@ class UnknownDeliveryOptionError(StageDoorError):
     def __init__(self, delivery: str) -> None:
         super().__init__(f"No delivery option {delivery!r}")
         self.delivery = delivery
+
+
+class PaymentFailedError(StageDoorError):
+    """The customer could not be charged. ``reason`` says why, for them."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason

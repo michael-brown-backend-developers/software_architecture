@@ -36,3 +36,15 @@ def test_an_error_is_reported_without_a_traceback(
     assert (
         "Error: No booking with ID 'does-not-exist'" in capsys.readouterr().err
     )
+
+
+def test_a_declined_card_is_explained_to_the_customer(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    status = main(
+        "book --name Ada --email ada@example.com --pay card"
+        " --token pm_card_declined TEE-STAGEDOOR".split()
+    )
+
+    assert status == 1
+    assert "Error: Your card was declined." in capsys.readouterr().err

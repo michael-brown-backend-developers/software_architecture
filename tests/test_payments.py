@@ -41,7 +41,7 @@ def test_a_card_needs_a_token() -> None:
 def test_paying_with_paypal() -> None:
     paypal = PayPalPayment(client_id="id", secret="secret")
 
-    assert paypal.charge(AMOUNT, "abc123", "payer_ok").startswith("PAYID-")
+    assert paypal.charge(AMOUNT, "abc123", "payer_ok")["status"] == "COMPLETED"
     assert paypal.fee(AMOUNT) == Decimal("2.13")
 
 

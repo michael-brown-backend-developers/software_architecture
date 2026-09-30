@@ -28,8 +28,12 @@ class PaymentMethod(Protocol):
 
     def charge(
         self, amount: Decimal, booking_id: str, token: str | None
-    ) -> str:
-        """Take ``amount`` from the customer. Return the payment reference."""
+    ) -> str | dict[str, str]:
+        """Take ``amount`` from the customer.
+
+        Return the payment reference, or for PayPal, the whole of PayPal's
+        answer, so that the booking can see whether the payment went through.
+        """
         ...
 
     def fee(self, amount: Decimal) -> Decimal:
@@ -81,13 +85,12 @@ class PayPalPayment:
 
     def charge(
         self, amount: Decimal, booking_id: str, token: str | None
-    ) -> str:
+    ) -> dict[str, str]:
         if token is None:
             raise MissingPaymentTokenError("paypal")
-        result = self.client.create_order(
+        return self.client.create_order(
             {"amount": str(amount), "currency": "GBP", "payer": token}
         )
-        return result["id"]
 
     def fee(self, amount: Decimal) -> Decimal:
         return _percentage(amount, "0.029") + Decimal("0.30")
