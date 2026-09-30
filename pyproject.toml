@@ -1,0 +1,39 @@
+[project]
+name = "stagedoor"
+version = "0.1.0"
+description = "A small box office, built to be changed."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+stagedoor = "stagedoor.cli:main"
+
+[tool.poetry]
+packages = [{ include = "stagedoor", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 79  # listings must fit the printed page
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.1.1,<10.0.0)",
+    "mypy (>=2.3.1,<3.0.0)",
+    "ruff (>=0.16.9,<0.17.0)"
+]
