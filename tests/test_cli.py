@@ -1,0 +1,38 @@
+import pytest
+
+from stagedoor.cli import main
+
+
+def test_whats_on_lists_the_catalogue(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["whats-on"]) == 0
+
+    assert "MUC0314-ADULT" in capsys.readouterr().out
+
+
+def test_a_booking_can_be_made_and_shown(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(
+        "book --name Ada --email ada@example.com"
+        " MUC0314-ADULT:2 PROG-MUCHADO".split()
+    )
+    made = capsys.readouterr().out
+    booking_id = made.split()[1]
+
+    assert main(["booking", booking_id]) == 0
+
+    shown = capsys.readouterr().out
+    assert "2 x Much Ado About NoneType, Sat 14 Mar 19:30 - Adult" in shown
+    assert "Total: £70.00" in shown
+
+
+def test_an_error_is_reported_without_a_traceback(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["booking", "does-not-exist"]) == 1
+
+    assert (
+        "Error: No booking with ID 'does-not-exist'" in capsys.readouterr().err
+    )
