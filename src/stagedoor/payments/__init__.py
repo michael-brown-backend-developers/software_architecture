@@ -17,14 +17,26 @@ from stagedoor.payments.bank_transfer import BankTransferPayment
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.payments.paypal import PayPalPayment
 from stagedoor.payments.stripe import StripeCardPayment
+from stagedoor.payments.wrappers import (
+    LoggingPaymentMethod,
+    RetryingPaymentMethod,
+)
 
 PAYMENT_METHODS: dict[str, PaymentMethod] = {
-    "card": StripeCardPayment(
-        api_key=os.environ.get("STRIPE_API_KEY", "sk_test_stagedoor"),
+    "card": LoggingPaymentMethod(
+        RetryingPaymentMethod(
+            StripeCardPayment(
+                api_key=os.environ.get("STRIPE_API_KEY", "sk_test_stagedoor"),
+            ),
+        ),
+        "Stripe charge",
     ),
-    "paypal": PayPalPayment(
-        client_id=os.environ.get("PAYPAL_CLIENT_ID", "stagedoor-sandbox"),
-        secret=os.environ.get("PAYPAL_SECRET", "sandbox-secret"),
+    "paypal": LoggingPaymentMethod(
+        PayPalPayment(
+            client_id=os.environ.get("PAYPAL_CLIENT_ID", "stagedoor-sandbox"),
+            secret=os.environ.get("PAYPAL_SECRET", "sandbox-secret"),
+        ),
+        "PayPal charge",
     ),
     "bank_transfer": BankTransferPayment(),
 }

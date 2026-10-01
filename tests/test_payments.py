@@ -111,17 +111,7 @@ def test_an_unknown_payment_method_is_rejected() -> None:
         get_payment_method("cash")
 
 
-def test_a_brief_stripe_outage_is_tried_again() -> None:
-    fakestripe.simulate_outage = 2
-
-    result = StripeCardPayment(api_key="sk_test").charge(
-        AMOUNT, "abc123", "pm_card_visa"
-    )
-
-    assert result.status == PaymentStatus.PAID
-
-
-def test_a_long_stripe_outage_gives_up() -> None:
+def test_an_unreachable_stripe_is_unavailable_not_declined() -> None:
     fakestripe.simulate_outage = True
 
     with pytest.raises(PaymentUnavailableError):

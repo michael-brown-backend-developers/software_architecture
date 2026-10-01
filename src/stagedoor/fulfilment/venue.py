@@ -4,16 +4,13 @@ This is the only module in StageDoor that knows the venue's API. It holds
 the seats for every performance on a booking, and gives them back.
 """
 
-import logging
-import time
 from collections import Counter
 
 import fakevenue
 
-from stagedoor.exceptions import FulfilmentError
+from stagedoor.exceptions import FulfilmentError, FulfilmentUnavailableError
 from stagedoor.models import Booking
-
-logger = logging.getLogger(__name__)
+from stagedoor.resilience import retry, timed
 
 
 class VenueHolds:
@@ -36,26 +33,25 @@ class VenueHolds:
         holds: list[str] = []
         try:
             for performance, count in seats.items():
-                # The venue's system is sometimes busy. Try again once.
-                for attempt in (1, 2):
-                    started = time.perf_counter()
-                    try:
-                        hold = self.client.create_hold(performance, count)
-                        break
-                    except fakevenue.VenueAPIError as error:
-                        if error.status != 503 or attempt == 2:
-                            raise
-                        time.sleep(1.0)
-                    finally:
-                        elapsed = time.perf_counter() - started
-                        logger.info("Venue hold took %.3fs", elapsed)
-                holds.append(hold["holdRef"])
-        except fakevenue.VenueAPIError as error:
+                holds.append(self._hold(performance, count))
+        except FulfilmentError:
             self.release(tuple(holds))
+            raise
+        return tuple(holds)
+
+    @timed("Venue hold")
+    @retry(attempts=2, base_delay=1.0)
+    def _hold(self, performance: str, count: int) -> str:
+        try:
+            return self.client.create_hold(performance, count)["holdRef"]
+        except fakevenue.VenueAPIError as error:
+            if error.status == 503:
+                raise FulfilmentUnavailableError(
+                    "the venue's system is not answering"
+                ) from error
             raise FulfilmentError(
                 f"the venue could not hold the seats ({error.message})"
             ) from error
-        return tuple(holds)
 
     def release(self, holds: tuple[str, ...]) -> None:
         """Give held seats back to the venue."""

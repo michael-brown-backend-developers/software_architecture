@@ -101,7 +101,11 @@ class MissingAddressError(StageDoorError):
         super().__init__("Posted tickets need an address")
 
 
-class PaymentUnavailableError(StageDoorError):
+class TransientError(StageDoorError):
+    """Something failed, but trying again later might work."""
+
+
+class PaymentUnavailableError(TransientError):
     """The payment provider could not be reached. Later may work."""
 
     def __init__(self, provider: str) -> None:
@@ -115,3 +119,7 @@ class FulfilmentError(StageDoorError):
     def __init__(self, reason: str) -> None:
         super().__init__(f"Could not issue the tickets: {reason}")
         self.reason = reason
+
+
+class FulfilmentUnavailableError(FulfilmentError, TransientError):
+    """Part of issuing the tickets is not answering. Later might work."""
