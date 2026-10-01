@@ -99,3 +99,11 @@ class MissingAddressError(StageDoorError):
 
     def __init__(self) -> None:
         super().__init__("Posted tickets need an address")
+
+
+class FulfilmentError(StageDoorError):
+    """The tickets could not be issued. ``reason`` says why."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"Could not issue the tickets: {reason}")
+        self.reason = reason

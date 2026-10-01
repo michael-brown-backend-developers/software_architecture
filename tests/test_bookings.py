@@ -2,7 +2,6 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
-import fakeroyalmail
 import fakevenue
 import pytest
 
@@ -10,6 +9,7 @@ from stagedoor.bookings import place_booking
 from stagedoor.capacity import PLACES
 from stagedoor.exceptions import (
     EmptyBookingError,
+    FulfilmentError,
     InvalidQuantityError,
     MissingAddressError,
     NotEnoughPlacesError,
@@ -196,7 +196,7 @@ def test_posted_tickets_get_a_tracking_number(ada_at_home: Customer) -> None:
 def test_a_failed_label_gives_the_seats_back(ada_at_home: Customer) -> None:
     nowhere = Address("1 Nowhere Lane", "Nowhere", "XX1 1XX", "GB")
 
-    with pytest.raises(fakeroyalmail.RoyalMailError):
+    with pytest.raises(FulfilmentError):
         place_booking(
             replace(ada_at_home, address=nowhere),
             [("MUC0314-ADULT", 2)],
