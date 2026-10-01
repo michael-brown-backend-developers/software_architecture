@@ -5,6 +5,7 @@ import pytest
 
 from stagedoor.exceptions import BookingNotFoundError
 from stagedoor.models import (
+    Address,
     Booking,
     BookingLine,
     Customer,
@@ -17,7 +18,11 @@ from stagedoor.storage import load_booking, save_booking
 def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
     booking = Booking(
         id="abc123",
-        customer=ada,
+        customer=Customer(
+            name=ada.name,
+            email=ada.email,
+            address=Address("1 High St", "Leeds", "LS1 1AA", "GB"),
+        ),
         lines=(
             BookingLine(
                 code="MUC0314-ADULT",
@@ -40,6 +45,9 @@ def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
         payment_status=PaymentStatus.PAID,
         payment_fee=Decimal("1.10"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
+        hold_references=("H-1234567890",),
+        tracking_number="RM123456789GB",
+        invoice_number="INV-000042",
     )
 
     save_booking(booking)

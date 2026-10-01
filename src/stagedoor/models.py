@@ -32,15 +32,27 @@ class Item:
     name: str
     price: Decimal
     kind: ItemKind
+    weight_grams: int
     performance: str | None = None
 
 
 @dataclass(frozen=True)
+class Address:
+    """Where to post things. ``country`` is a two-letter code, like GB."""
+
+    line1: str
+    city: str
+    postcode: str
+    country: str
+
+
+@dataclass(frozen=True)
 class Customer:
-    """Somebody booking with us."""
+    """Somebody booking with us. Only posted tickets need an address."""
 
     name: str
     email: str
+    address: Address | None = None
 
 
 @dataclass(frozen=True)
@@ -83,3 +95,7 @@ class Booking:
     payment_status: PaymentStatus
     payment_fee: Decimal
     placed_at: datetime
+    hold_references: tuple[str, ...] = ()
+    wallet_pass: str | None = None
+    tracking_number: str | None = None
+    invoice_number: str | None = None

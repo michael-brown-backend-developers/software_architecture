@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.delivery import delivery_cost
+from stagedoor.delivery import delivery_cost, shipping_region
 from stagedoor.exceptions import UnknownDeliveryOptionError
 
 
@@ -24,3 +24,11 @@ def test_delivery_cost(
 def test_an_unknown_delivery_option_is_rejected() -> None:
     with pytest.raises(UnknownDeliveryOptionError):
         delivery_cost("carrier_pigeon", Decimal("10.00"))
+
+
+@pytest.mark.parametrize(
+    ("country", "region"),
+    [("GB", "UK"), ("FR", "EU"), ("IE", "EU"), ("US", "WORLD")],
+)
+def test_shipping_region(country: str, region: str) -> None:
+    assert shipping_region(country) == region

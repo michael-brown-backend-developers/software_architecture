@@ -1,6 +1,9 @@
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
+import fakeroyalmail
+import fakevenue
 import pytest
 
 from stagedoor.bookings import place_booking
@@ -8,12 +11,13 @@ from stagedoor.capacity import PLACES
 from stagedoor.exceptions import (
     EmptyBookingError,
     InvalidQuantityError,
+    MissingAddressError,
     NotEnoughPlacesError,
     PaymentFailedError,
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.models import Customer, PaymentStatus
+from stagedoor.models import Address, Customer, PaymentStatus
 from stagedoor.storage import load_booking
 
 
@@ -161,3 +165,61 @@ def test_a_bank_transfer_booking_is_awaiting_payment(ada: Customer) -> None:
     booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     assert booking.payment_status == PaymentStatus.AWAITING_PAYMENT
+
+
+def test_paid_e_tickets_are_held_issued_and_invoiced(ada: Customer) -> None:
+    booking = place_booking(
+        ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa"
+    )
+
+    assert len(booking.hold_references) == 1
+    assert fakevenue.SEATS["MUC0314"] == 118
+    assert booking.wallet_pass is not None
+    assert booking.wallet_pass.startswith("https://wallet.example/")
+    assert booking.invoice_number == "INV-000001"
+
+
+def test_posted_tickets_get_a_tracking_number(ada_at_home: Customer) -> None:
+    booking = place_booking(
+        ada_at_home,
+        [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)],
+        "card",
+        "pm_card_visa",
+        delivery="post",
+    )
+
+    assert booking.tracking_number is not None
+    assert booking.tracking_number.startswith("RM")
+    assert booking.wallet_pass is None
+
+
+def test_a_failed_label_gives_the_seats_back(ada_at_home: Customer) -> None:
+    nowhere = Address("1 Nowhere Lane", "Nowhere", "XX1 1XX", "GB")
+
+    with pytest.raises(fakeroyalmail.RoyalMailError):
+        place_booking(
+            replace(ada_at_home, address=nowhere),
+            [("MUC0314-ADULT", 2)],
+            "card",
+            "pm_card_visa",
+            delivery="post",
+        )
+
+    assert fakevenue.SEATS["MUC0314"] == 120
+    assert PLACES["MUC0314"] == 120
+
+
+def test_posted_tickets_need_an_address(ada: Customer) -> None:
+    with pytest.raises(MissingAddressError):
+        place_booking(
+            ada, [("MUC0314-ADULT", 1)], "bank_transfer", delivery="post"
+        )
+
+
+def test_a_bank_transfer_is_not_issued_until_it_is_paid(
+    ada: Customer,
+) -> None:
+    booking = place_booking(ada, [("MUC0314-ADULT", 2)], "bank_transfer")
+
+    assert booking.hold_references == ()
+    assert booking.invoice_number is None

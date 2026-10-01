@@ -41,3 +41,18 @@ def delivery_cost(delivery: str, goods_total: Decimal) -> Decimal:
     except KeyError:
         raise UnknownDeliveryOptionError(delivery) from None
     return price(goods_total)
+
+
+EU_COUNTRIES = set(
+    "AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO"
+    " SE SI SK".split()
+)
+
+
+def shipping_region(country: str) -> str:
+    """Where Royal Mail is posting to: the UK, the EU, or anywhere else."""
+    if country == "GB":
+        return "UK"
+    if country in EU_COUNTRIES:
+        return "EU"
+    return "WORLD"

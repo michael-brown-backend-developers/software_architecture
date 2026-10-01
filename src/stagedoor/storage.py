@@ -13,6 +13,7 @@ from typing import Any
 
 from stagedoor.exceptions import BookingNotFoundError
 from stagedoor.models import (
+    Address,
     Booking,
     BookingLine,
     Customer,
@@ -47,6 +48,7 @@ def _to_dict(booking: Booking) -> dict[str, Any]:
         "customer": {
             "name": booking.customer.name,
             "email": booking.customer.email,
+            "address": _address_to_dict(booking.customer.address),
         },
         "lines": [
             {
@@ -71,13 +73,21 @@ def _to_dict(booking: Booking) -> dict[str, Any]:
         "payment_status": booking.payment_status.value,
         "payment_fee": str(booking.payment_fee),
         "placed_at": booking.placed_at.isoformat(),
+        "hold_references": list(booking.hold_references),
+        "wallet_pass": booking.wallet_pass,
+        "tracking_number": booking.tracking_number,
+        "invoice_number": booking.invoice_number,
     }
 
 
 def _from_dict(data: dict[str, Any]) -> Booking:
     return Booking(
         id=data["id"],
-        customer=Customer(**data["customer"]),
+        customer=Customer(
+            name=data["customer"]["name"],
+            email=data["customer"]["email"],
+            address=_address_from_dict(data["customer"]["address"]),
+        ),
         lines=tuple(
             BookingLine(
                 code=line["code"],
@@ -101,4 +111,23 @@ def _from_dict(data: dict[str, Any]) -> Booking:
         payment_status=PaymentStatus(data["payment_status"]),
         payment_fee=Decimal(data["payment_fee"]),
         placed_at=datetime.fromisoformat(data["placed_at"]),
+        hold_references=tuple(data["hold_references"]),
+        wallet_pass=data["wallet_pass"],
+        tracking_number=data["tracking_number"],
+        invoice_number=data["invoice_number"],
     )
+
+
+def _address_to_dict(address: Address | None) -> dict[str, str] | None:
+    if address is None:
+        return None
+    return {
+        "line1": address.line1,
+        "city": address.city,
+        "postcode": address.postcode,
+        "country": address.country,
+    }
+
+
+def _address_from_dict(data: dict[str, str] | None) -> Address | None:
+    return None if data is None else Address(**data)

@@ -17,6 +17,7 @@ ITEMS: dict[str, Item] = {
             name="Much Ado About NoneType, Sat 14 Mar 19:30 - Adult",
             price=Decimal("32.00"),
             kind=ItemKind.TICKET,
+            weight_grams=10,
             performance="MUC0314",
         ),
         Item(
@@ -24,6 +25,7 @@ ITEMS: dict[str, Item] = {
             name="Much Ado About NoneType, Sat 14 Mar 19:30 - Concession",
             price=Decimal("24.00"),
             kind=ItemKind.TICKET,
+            weight_grams=10,
             performance="MUC0314",
         ),
         Item(
@@ -31,6 +33,7 @@ ITEMS: dict[str, Item] = {
             name="Much Ado About NoneType, Sun 15 Mar 14:30 - Adult",
             price=Decimal("28.00"),
             kind=ItemKind.TICKET,
+            weight_grams=10,
             performance="MUC0315",
         ),
         Item(
@@ -38,6 +41,7 @@ ITEMS: dict[str, Item] = {
             name="The Guido Father, Fri 20 Mar 19:30 - Adult",
             price=Decimal("26.50"),
             kind=ItemKind.TICKET,
+            weight_grams=10,
             performance="GDF0320",
         ),
         Item(
@@ -45,12 +49,14 @@ ITEMS: dict[str, Item] = {
             name="Much Ado About NoneType programme",
             price=Decimal("6.00"),
             kind=ItemKind.PROGRAMME,
+            weight_grams=150,
         ),
         Item(
             code="TEE-STAGEDOOR",
             name="StageDoor T-Shirt",
             price=Decimal("18.00"),
             kind=ItemKind.MERCH,
+            weight_grams=200,
         ),
     ]
 }

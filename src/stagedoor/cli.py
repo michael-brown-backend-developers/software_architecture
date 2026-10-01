@@ -14,7 +14,7 @@ from stagedoor.bookings import place_booking
 from stagedoor.catalogue import list_items
 from stagedoor.delivery import DELIVERY_PRICING
 from stagedoor.exceptions import StageDoorError
-from stagedoor.models import Customer
+from stagedoor.models import Address, Customer
 from stagedoor.payments import PAYMENT_METHODS
 from stagedoor.storage import load_booking
 
@@ -29,6 +29,15 @@ def _parse_item(text: str) -> tuple[str, int]:
         ) from None
 
 
+def _parse_address(text: str) -> Address:
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError(
+            f"expected 'LINE1, CITY, POSTCODE, COUNTRY', got {text!r}"
+        )
+    return Address(*parts)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="stagedoor")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -41,6 +50,11 @@ def _build_parser() -> argparse.ArgumentParser:
     book.add_argument("--pay", required=True, choices=PAYMENT_METHODS)
     book.add_argument("--token", help="card or PayPal payment token")
     book.add_argument("--discount", metavar="CODE")
+    book.add_argument(
+        "--address",
+        type=_parse_address,
+        help="for posted tickets: 'LINE1, CITY, POSTCODE, COUNTRY'",
+    )
     book.add_argument(
         "--delivery",
         default="e_ticket",
@@ -66,7 +80,9 @@ def main(argv: list[str] | None = None) -> int:
 
         elif args.command == "book":
             booking = place_booking(
-                Customer(name=args.name, email=args.email),
+                Customer(
+                    name=args.name, email=args.email, address=args.address
+                ),
                 args.items,
                 payment_method=args.pay,
                 payment_token=args.token,
@@ -95,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"Payment: {booking.payment_method}, {booking.payment_status}"
                 f" ({booking.payment_reference}), fee £{booking.payment_fee}"
             )
+            if booking.invoice_number:
+                print(f"Invoice: {booking.invoice_number}")
+                print(f"Seats held: {', '.join(booking.hold_references)}")
+            if booking.wallet_pass:
+                print(f"Tickets: {booking.wallet_pass}")
+            if booking.tracking_number:
+                print(f"Posted: {booking.tracking_number}")
 
     except StageDoorError as error:
         print(f"Error: {error}", file=sys.stderr)

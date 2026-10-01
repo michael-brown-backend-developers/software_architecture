@@ -92,3 +92,10 @@ class PaymentFailedError(StageDoorError):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class MissingAddressError(StageDoorError):
+    """Posting tickets needs an address, and none was given."""
+
+    def __init__(self) -> None:
+        super().__init__("Posted tickets need an address")
