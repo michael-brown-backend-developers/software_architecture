@@ -3,8 +3,11 @@
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
+from stagedoor.alerts import notify_sales_team
+from stagedoor.analytics import record_sale
 from stagedoor.capacity import check_places, take_places
 from stagedoor.catalogue import get_item
 from stagedoor.exceptions import (
@@ -13,12 +16,16 @@ from stagedoor.exceptions import (
     MissingAddressError,
 )
 from stagedoor.fulfilment import Fulfilment
+from stagedoor.loyalty import award_points
 from stagedoor.models import Booking, BookingLine, Customer, PaymentStatus
 from stagedoor.notifications import send_confirmation
 from stagedoor.payments import get_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.pricing import price_booking
 from stagedoor.storage import save_booking
+
+# The sales team like to ring anybody who spends more than this.
+BIG_BOOKING = Decimal("500.00")
 
 
 def place_booking(
@@ -86,6 +93,10 @@ def place_booking(
     take_places(lines)
     save_booking(booking)
     send_confirmation(booking, method)
+    award_points(booking.customer.email, booking.total)
+    record_sale(booking)
+    if booking.total > BIG_BOOKING:
+        notify_sales_team(booking)
 
     return booking
 

@@ -19,6 +19,7 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
+from stagedoor.loyalty import points_for
 from stagedoor.models import Address, Booking, Customer, PaymentStatus
 from stagedoor.settings import Settings
 from stagedoor.storage import load_booking
@@ -230,3 +231,41 @@ def test_a_bank_transfer_is_not_issued_until_it_is_paid(
 
     assert booking.hold_references == ()
     assert booking.invoice_number is None
+
+
+def test_a_booking_earns_loyalty_points(ada: Customer) -> None:
+    book(
+        ada,
+        [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)],
+        "card",
+        "pm_card_visa",
+    )
+
+    assert points_for("ada@example.com") == 70
+
+
+def test_every_booking_is_recorded_for_the_dashboard(
+    ada: Customer, isolated_directories: Path
+) -> None:
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+
+    sales = isolated_directories / "data" / "analytics.csv"
+    assert f"{booking.id},18.00" in sales.read_text()
+
+
+def test_a_big_booking_is_passed_to_the_sales_team(
+    ada: Customer, isolated_directories: Path
+) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 16)], "card", "pm_card_visa")
+
+    alert = isolated_directories / "mail" / f"{booking.id}-sales.txt"
+    assert "has just booked £512.00" in alert.read_text()
+
+
+def test_a_small_booking_is_not(
+    ada: Customer, isolated_directories: Path
+) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+
+    alert = isolated_directories / "mail" / f"{booking.id}-sales.txt"
+    assert not alert.exists()
