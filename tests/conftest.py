@@ -41,6 +41,7 @@ def reset_fakes() -> Iterator[None]:
     fakewallet.simulate_outage = False
     fakeroyalmail.simulate_outage = False
     fakestripe.simulate_outage = False
+    fakestripe._by_idempotency_key.clear()
 
 
 @pytest.fixture

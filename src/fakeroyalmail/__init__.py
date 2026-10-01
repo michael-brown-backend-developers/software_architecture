@@ -1,7 +1,8 @@
 """A stand-in for Royal Mail's shipping API.
 
 Weights are whole grams, the service is one of Royal Mail's own codes, and
-the answer is a tracking number. A failure raises RoyalMailError.
+the answer is a tracking number. A failure raises RoyalMailError, whose
+``temporary`` says whether trying again later might work.
 
     XX1 1XX          a postcode Royal Mail cannot deliver to
     simulate_outage  set it to True, and every call raises RoyalMailError;
@@ -30,6 +31,10 @@ def _outage() -> bool:
 class RoyalMailError(Exception):
     """Royal Mail could not book the shipment."""
 
+    def __init__(self, message: str, temporary: bool = False) -> None:
+        super().__init__(message)
+        self.temporary = temporary
+
 
 class RoyalMailClient:
     """A connection to Royal Mail's shipping API."""
@@ -42,7 +47,9 @@ class RoyalMailClient:
     ) -> str:
         """Book a shipment, and return its tracking number."""
         if _outage():
-            raise RoyalMailError("Royal Mail is not responding.")
+            raise RoyalMailError(
+                "Royal Mail is not responding.", temporary=True
+            )
         if service not in SERVICES:
             raise RoyalMailError(f"Unknown service {service!r}")
         if postcode.strip().upper() == "XX1 1XX":

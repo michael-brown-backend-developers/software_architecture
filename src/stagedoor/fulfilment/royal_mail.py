@@ -5,6 +5,9 @@ out what Royal Mail needs - the weight, the postcode and country, and the
 right service code - and turns Royal Mail's errors into ours.
 """
 
+import logging
+import time
+
 import fakeroyalmail
 
 from stagedoor.catalogue import get_item
@@ -14,6 +17,8 @@ from stagedoor.models import Booking
 
 # Royal Mail's service codes, by where the tickets are going.
 SERVICES = {"UK": "TPN48", "EU": "INT-EU", "WORLD": "INT-ROW"}
+
+logger = logging.getLogger(__name__)
 
 
 class RoyalMailShipping:
@@ -31,12 +36,22 @@ class RoyalMailShipping:
             get_item(line.code).weight_grams * line.quantity
             for line in booking.lines
         )
-        try:
-            return self.client.create_shipment(
-                weight_grams=weight,
-                postcode=address.postcode,
-                country=address.country,
-                service=SERVICES[shipping_region(address.country)],
-            )
-        except fakeroyalmail.RoyalMailError as error:
-            raise FulfilmentError(str(error)) from error
+        # Royal Mail has a bad hour most Mondays. Try three times.
+        for attempt in range(1, 4):
+            started = time.perf_counter()
+            try:
+                tracking_number = self.client.create_shipment(
+                    weight_grams=weight,
+                    postcode=address.postcode,
+                    country=address.country,
+                    service=SERVICES[shipping_region(address.country)],
+                )
+                break
+            except fakeroyalmail.RoyalMailError as error:
+                if attempt == 3:
+                    raise FulfilmentError(str(error)) from error
+                time.sleep(0.5)
+            finally:
+                elapsed = time.perf_counter() - started
+                logger.info("Royal Mail shipment took %.3fs", elapsed)
+        return tracking_number

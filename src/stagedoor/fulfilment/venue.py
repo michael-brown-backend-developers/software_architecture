@@ -4,12 +4,16 @@ This is the only module in StageDoor that knows the venue's API. It holds
 the seats for every performance on a booking, and gives them back.
 """
 
+import logging
+import time
 from collections import Counter
 
 import fakevenue
 
 from stagedoor.exceptions import FulfilmentError
 from stagedoor.models import Booking
+
+logger = logging.getLogger(__name__)
 
 
 class VenueHolds:
@@ -32,7 +36,19 @@ class VenueHolds:
         holds: list[str] = []
         try:
             for performance, count in seats.items():
-                hold = self.client.create_hold(performance, count)
+                # The venue's system is sometimes busy. Try again once.
+                for attempt in (1, 2):
+                    started = time.perf_counter()
+                    try:
+                        hold = self.client.create_hold(performance, count)
+                        break
+                    except fakevenue.VenueAPIError as error:
+                        if error.status != 503 or attempt == 2:
+                            raise
+                        time.sleep(1.0)
+                    finally:
+                        elapsed = time.perf_counter() - started
+                        logger.info("Venue hold took %.3fs", elapsed)
                 holds.append(hold["holdRef"])
         except fakevenue.VenueAPIError as error:
             self.release(tuple(holds))

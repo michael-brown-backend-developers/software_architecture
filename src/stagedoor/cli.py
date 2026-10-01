@@ -8,6 +8,7 @@ Usage::
 """
 
 import argparse
+import logging
 import sys
 
 from stagedoor.bookings import place_booking
@@ -72,6 +73,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     try:
         if args.command == "whats-on":

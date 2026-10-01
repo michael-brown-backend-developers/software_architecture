@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import fakeroyalmail
 import fakevenue
 import fakewallet
 import pytest
@@ -150,3 +151,27 @@ def test_posting_to_the_eu_uses_royal_mails_eu_service(
 
     assert result.tracking_number is not None
     assert result.tracking_number.endswith("FR")
+
+
+def test_a_brief_royal_mail_outage_is_tried_again(
+    fulfilment: Fulfilment, ada_at_home: Customer
+) -> None:
+    fakeroyalmail.simulate_outage = 1
+
+    result = fulfilment.fulfil(
+        booking_for(ada_at_home, "post", ticket("MUC0314", 2))
+    )
+
+    assert result.tracking_number is not None
+
+
+def test_a_brief_venue_outage_is_tried_again(
+    fulfilment: Fulfilment, ada: Customer
+) -> None:
+    fakevenue.simulate_outage = 1
+
+    result = fulfilment.fulfil(
+        booking_for(ada, "box_office", ticket("MUC0314", 2))
+    )
+
+    assert len(result.hold_references) == 1

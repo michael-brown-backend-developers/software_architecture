@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import fakestripe
 import pytest
 
 from stagedoor.exceptions import (
     MissingPaymentTokenError,
     PaymentFailedError,
+    PaymentUnavailableError,
     UnknownPaymentMethodError,
 )
 from stagedoor.models import Booking, Customer, PaymentStatus
@@ -107,3 +109,31 @@ def test_a_bank_transfer_tells_the_customer_how_to_pay(ada: Customer) -> None:
 def test_an_unknown_payment_method_is_rejected() -> None:
     with pytest.raises(UnknownPaymentMethodError):
         get_payment_method("cash")
+
+
+def test_a_brief_stripe_outage_is_tried_again() -> None:
+    fakestripe.simulate_outage = 2
+
+    result = StripeCardPayment(api_key="sk_test").charge(
+        AMOUNT, "abc123", "pm_card_visa"
+    )
+
+    assert result.status == PaymentStatus.PAID
+
+
+def test_a_long_stripe_outage_gives_up() -> None:
+    fakestripe.simulate_outage = True
+
+    with pytest.raises(PaymentUnavailableError):
+        StripeCardPayment(api_key="sk_test").charge(
+            AMOUNT, "abc123", "pm_card_visa"
+        )
+
+
+def test_charging_the_same_booking_twice_charges_once() -> None:
+    card = StripeCardPayment(api_key="sk_test")
+
+    first = card.charge(AMOUNT, "abc123", "pm_card_visa")
+    second = card.charge(AMOUNT, "abc123", "pm_card_visa")
+
+    assert first.reference == second.reference

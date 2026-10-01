@@ -101,6 +101,14 @@ class MissingAddressError(StageDoorError):
         super().__init__("Posted tickets need an address")
 
 
+class PaymentUnavailableError(StageDoorError):
+    """The payment provider could not be reached. Later may work."""
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(f"Could not reach {provider}. Please try again soon.")
+        self.provider = provider
+
+
 class FulfilmentError(StageDoorError):
     """The tickets could not be issued. ``reason`` says why."""
 
