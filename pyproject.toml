@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A small box office, built to be changed."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = ["sqlalchemy (>=2.0,<3.0)", "psycopg[binary] (>=3.2,<4.0)"]
 
 [project.scripts]
 stagedoor = "stagedoor.cli:main"

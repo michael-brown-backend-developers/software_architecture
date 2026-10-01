@@ -12,6 +12,11 @@ from stagedoor.exceptions import SettingsError
 
 ALL_PAYMENT_METHODS = "card,paypal,bank_transfer"
 
+# The database in compose.yaml.
+DATABASE_URL = (
+    "postgresql+psycopg://stagedoor:stagedoor@localhost:5433/stagedoor"
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -28,6 +33,7 @@ class Settings:
     royal_mail_api_key: str
     data_dir: Path
     mail_dir: Path
+    database_url: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> Settings:
@@ -62,4 +68,5 @@ class Settings:
             royal_mail_api_key=key("ROYAL_MAIL_API_KEY", "rm-test-key"),
             data_dir=Path(env.get("STAGEDOOR_DATA_DIR", "data")),
             mail_dir=Path(env.get("STAGEDOOR_MAIL_DIR", "mail")),
+            database_url=env.get("STAGEDOOR_DATABASE_URL", DATABASE_URL),
         )

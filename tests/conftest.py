@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -7,10 +8,13 @@ import fakevenue
 import fakewallet
 import pytest
 from fakes import no_sleep
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
 from stagedoor.bookings import BookingService
 from stagedoor.bootstrap import App, bootstrap
 from stagedoor.capacity import PLACES
+from stagedoor.db import Base, create_tables
 from stagedoor.models import Address, Customer
 from stagedoor.settings import Settings
 
@@ -25,13 +29,41 @@ def isolated_directories(
     return tmp_path
 
 
+TEST_DATABASE_URL = os.environ.get(
+    "STAGEDOOR_TEST_DATABASE_URL",
+    "postgresql+psycopg://stagedoor:stagedoor@localhost:5433/stagedoor_test",
+)
+
+
+@pytest.fixture(scope="session")
+def test_database() -> str:
+    """The test database, with StageDoor's tables, or a skipped test."""
+    try:
+        with create_engine(TEST_DATABASE_URL).connect():
+            pass
+    except OperationalError:
+        pytest.skip("PostgreSQL is not running: docker compose up -d")
+    create_tables(TEST_DATABASE_URL)
+    return TEST_DATABASE_URL
+
+
 @pytest.fixture
-def settings(isolated_directories: Path) -> Settings:
-    """Development settings, with the test's own data and mail directories."""
+def database(test_database: str) -> str:
+    """The test database, emptied before the test."""
+    with create_engine(test_database).begin() as connection:
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(text(f"DELETE FROM {table.name}"))
+    return test_database
+
+
+@pytest.fixture
+def settings(isolated_directories: Path, database: str) -> Settings:
+    """Development settings, with the test's own directories and database."""
     return Settings.from_env(
         {
             "STAGEDOOR_DATA_DIR": str(isolated_directories / "data"),
             "STAGEDOOR_MAIL_DIR": str(isolated_directories / "mail"),
+            "STAGEDOOR_DATABASE_URL": database,
         }
     )
 

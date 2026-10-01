@@ -8,6 +8,7 @@ Usage::
     stagedoor paid 3f9a1c2b7d4e
     stagedoor check-in 3f9a1c2b7d4e
     stagedoor cancel 3f9a1c2b7d4e
+    stagedoor create-tables
 """
 
 import argparse
@@ -18,6 +19,7 @@ from collections.abc import Mapping
 
 from stagedoor.bootstrap import bootstrap
 from stagedoor.catalogue import list_items
+from stagedoor.db import create_tables
 from stagedoor.delivery import DELIVERY_PRICING
 from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Address, Customer
@@ -51,6 +53,7 @@ def _build_parser(
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("whats-on", help="list everything we sell")
+    commands.add_parser("create-tables", help="set up an empty database")
 
     book = commands.add_parser("book", help="make a booking")
     book.add_argument("--name", required=True)
@@ -89,10 +92,15 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     try:
-        app = bootstrap(Settings.from_env(os.environ))
+        settings = Settings.from_env(os.environ)
+        app = bootstrap(settings)
         args = _build_parser(app.payment_methods).parse_args(argv)
 
-        if args.command == "whats-on":
+        if args.command == "create-tables":
+            create_tables(settings.database_url)
+            print("StageDoor's tables are ready.")
+
+        elif args.command == "whats-on":
             for item in list_items():
                 print(f"{item.code:<14} £{item.price:>6}  {item.name}")
 

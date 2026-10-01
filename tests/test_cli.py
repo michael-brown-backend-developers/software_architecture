@@ -3,6 +3,13 @@ import pytest
 from stagedoor.cli import main
 
 
+@pytest.fixture(autouse=True)
+def database_for_the_command_line(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STAGEDOOR_DATABASE_URL", database)
+
+
 def test_whats_on_lists_the_catalogue(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

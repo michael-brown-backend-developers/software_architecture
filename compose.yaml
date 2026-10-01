@@ -1,0 +1,24 @@
+# StageDoor's database, for development and for the tests.
+#
+#   docker compose up -d      start it
+#   docker compose down       stop it (the data is kept in a volume)
+#
+# It listens on port 5433, so it will not clash with another PostgreSQL
+# you may already have on 5432.
+name: stagedoor
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: stagedoor
+      POSTGRES_PASSWORD: stagedoor
+      POSTGRES_DB: stagedoor
+    ports:
+      - "5433:5432"
+    volumes:
+      - data:/var/lib/postgresql
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  data:

@@ -6,12 +6,10 @@ rather than how.
 """
 
 from decimal import Decimal
-from pathlib import Path
 
 from stagedoor.exceptions import MissingPaymentTokenError, PaymentFailedError
 from stagedoor.models import Booking, PaymentStatus
 from stagedoor.payments.base import PaymentResult
-from stagedoor.storage import BookingStore
 
 DECLINED = "declined"
 
@@ -43,16 +41,6 @@ class FakePaymentMethod:
 
     def describe(self, booking: Booking) -> str:
         return "Paid with a fake."
-
-
-class FailingStore(BookingStore):
-    """A booking store on a disk that is full."""
-
-    def __init__(self) -> None:
-        super().__init__(Path("nowhere"))
-
-    def save(self, booking: Booking) -> None:
-        raise OSError("No space left on device")
 
 
 def no_sleep(seconds: float) -> None:

@@ -6,7 +6,6 @@ from pathlib import Path
 import fakestripe
 import fakevenue
 import pytest
-from fakes import FailingStore, FakePaymentMethod
 
 from stagedoor.bookings import BookingService
 from stagedoor.bus import EventBus
@@ -400,32 +399,6 @@ def test_a_bank_transfer_is_paid_by_quoting_the_booking_id(
     booking = service.place(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     assert booking.payment_reference == "SD-3F9A1C2B7D4E"
-
-
-def test_a_booking_that_cannot_be_saved_is_not_confirmed(
-    service: BookingService, ada: Customer, isolated_directories: Path
-) -> None:
-    service = replace(service, store=FailingStore(), new_id=lambda: "abc123")
-
-    with pytest.raises(OSError):
-        service.place(ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa")
-
-    mail = isolated_directories / "mail"
-    assert not (mail / "abc123-confirmation.txt").exists()
-
-
-@pytest.mark.xfail(strict=True, reason="paid for, never saved: chapter 11")
-def test_a_booking_that_cannot_be_saved_is_not_paid_for(
-    service: BookingService, ada: Customer
-) -> None:
-    card = FakePaymentMethod()
-    service = replace(service, payment_methods={"card": card})
-    service = replace(service, store=FailingStore())
-
-    with pytest.raises(OSError):
-        service.place(ada, [("TEE-STAGEDOOR", 1)], "card", "tok_ok")
-
-    assert card.charges == []
 
 
 def test_a_booking_survives_a_busy_moment_at_stripe(

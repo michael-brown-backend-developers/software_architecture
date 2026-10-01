@@ -15,6 +15,7 @@ from stagedoor.alerts import notify_sales_team
 from stagedoor.analytics import record_sale
 from stagedoor.bookings import BookingService
 from stagedoor.bus import EventBus
+from stagedoor.db import connect
 from stagedoor.events import BookingConfirmed
 from stagedoor.fulfilment import create_fulfilment
 from stagedoor.loyalty import award_points
@@ -22,7 +23,6 @@ from stagedoor.notifications import Mailer
 from stagedoor.payments import create_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.settings import Settings
-from stagedoor.storage import BookingStore
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ def bootstrap(
         bookings=BookingService(
             payment_methods=payment_methods,
             fulfilment=create_fulfilment(settings, sleep),
-            store=BookingStore(settings.data_dir / "bookings"),
+            sessions=connect(settings.database_url),
             mailer=Mailer(settings.mail_dir),
             bus=bus,
             clock=now,
