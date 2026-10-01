@@ -5,6 +5,9 @@ Usage::
     stagedoor whats-on
     stagedoor book --name Ada --email ada@example.com MUC0314-ADULT:2
     stagedoor booking 3f9a1c2b7d4e
+    stagedoor paid 3f9a1c2b7d4e
+    stagedoor check-in 3f9a1c2b7d4e
+    stagedoor cancel 3f9a1c2b7d4e
 """
 
 import argparse
@@ -13,7 +16,12 @@ import os
 import sys
 from collections.abc import Mapping
 
-from stagedoor.bookings import place_booking
+from stagedoor.bookings import (
+    cancel_booking,
+    check_in,
+    mark_paid,
+    place_booking,
+)
 from stagedoor.bootstrap import bootstrap
 from stagedoor.catalogue import list_items
 from stagedoor.delivery import DELIVERY_PRICING
@@ -71,8 +79,15 @@ def _build_parser(
         "items", nargs="+", type=_parse_item, metavar="CODE[:QUANTITY]"
     )
 
-    booking = commands.add_parser("booking", help="show a booking")
-    booking.add_argument("booking_id")
+    for command, description in [
+        ("booking", "show a booking"),
+        ("paid", "a bank transfer has arrived: issue the tickets"),
+        ("check-in", "let a customer in at the door"),
+        ("cancel", "cancel a booking, refunding it if it was paid"),
+    ]:
+        commands.add_parser(command, help=description).add_argument(
+            "booking_id"
+        )
 
     return parser
 
@@ -104,6 +119,22 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 
+        elif args.command == "paid":
+            booking = mark_paid(args.booking_id, fulfilment=app.fulfilment)
+            print(f"Booking {booking.id} is paid. Tickets issued.")
+
+        elif args.command == "check-in":
+            booking = check_in(args.booking_id)
+            print(f"Booking {booking.id} checked in. Enjoy the show.")
+
+        elif args.command == "cancel":
+            booking = cancel_booking(
+                args.booking_id,
+                payment_methods=app.payment_methods,
+                fulfilment=app.fulfilment,
+            )
+            print(f"Booking {booking.id} is {booking.status}.")
+
         elif args.command == "booking":
             booking = load_booking(args.booking_id)
             customer = booking.customer
@@ -121,9 +152,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Delivery ({booking.delivery}): £{booking.delivery_fee}")
             print(f"Total: £{booking.total} (includes VAT of £{booking.vat})")
             print(
-                f"Payment: {booking.payment_method}, {booking.payment_status}"
+                f"Payment: {booking.payment_method}"
                 f" ({booking.payment_reference}), fee £{booking.payment_fee}"
             )
+            print(f"Status: {booking.status}")
             if booking.invoice_number:
                 print(f"Invoice: {booking.invoice_number}")
                 print(f"Seats held: {', '.join(booking.hold_references)}")

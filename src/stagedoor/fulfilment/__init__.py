@@ -59,6 +59,10 @@ class Fulfilment:
             invoice_number=create_invoice(booking),
         )
 
+    def release(self, booking: Booking) -> None:
+        """Give a cancelled booking's seats back to the venue."""
+        self.venue.release(booking.hold_references)
+
 
 def create_fulfilment(settings: Settings) -> Fulfilment:
     """Build the facade, and every adapter behind it, from the settings."""

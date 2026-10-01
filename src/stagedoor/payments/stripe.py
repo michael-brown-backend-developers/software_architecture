@@ -49,6 +49,15 @@ class StripeCardPayment:
             raise PaymentUnavailableError("Stripe") from error
         return PaymentResult(reference=intent.id, status=PaymentStatus.PAID)
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        fakestripe.api_key = self.api_key
+        try:
+            fakestripe.Refund.create(
+                payment_intent=reference, amount=to_pence(amount)
+            )
+        except fakestripe.error.APIConnectionError as error:
+            raise PaymentUnavailableError("Stripe") from error
+
     def fee(self, amount: Decimal) -> Decimal:
         return percentage(amount, "0.015") + Decimal("0.20")
 

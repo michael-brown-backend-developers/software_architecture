@@ -6,12 +6,18 @@ from typing import Any
 import fakevenue
 import pytest
 
-from stagedoor.bookings import place_booking
+from stagedoor.bookings import (
+    cancel_booking,
+    check_in,
+    mark_paid,
+    place_booking,
+)
 from stagedoor.bootstrap import bootstrap
 from stagedoor.bus import EventBus
 from stagedoor.capacity import PLACES
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
+    BookingStatusError,
     EmptyBookingError,
     FulfilmentError,
     InvalidQuantityError,
@@ -21,7 +27,7 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.models import Address, Booking, Customer, PaymentStatus
+from stagedoor.models import Address, Booking, BookingStatus, Customer
 from stagedoor.settings import Settings
 from stagedoor.storage import load_booking
 
@@ -146,7 +152,7 @@ def test_the_booking_records_its_payment(ada: Customer) -> None:
 
     assert booking.payment_method == "card"
     assert booking.payment_reference.startswith("pi_")
-    assert booking.payment_status == PaymentStatus.PAID
+    assert booking.status == BookingStatus.PAID
     assert booking.payment_fee == Decimal("0.47")
 
 
@@ -181,7 +187,7 @@ def test_a_declined_paypal_payment_says_why_and_books_nothing(
 def test_a_bank_transfer_booking_is_awaiting_payment(ada: Customer) -> None:
     booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
-    assert booking.payment_status == PaymentStatus.AWAITING_PAYMENT
+    assert booking.status == BookingStatus.AWAITING_PAYMENT
 
 
 def test_paid_e_tickets_are_held_issued_and_invoiced(ada: Customer) -> None:
@@ -266,3 +272,71 @@ def test_a_reaction_that_fails_does_not_fail_the_booking(
 
     assert load_booking(booking.id) == booking
     assert "award_points failed to handle BookingConfirmed" in caplog.text
+
+
+def cancel(booking_id: str) -> Booking:
+    return cancel_booking(
+        booking_id,
+        payment_methods=APP.payment_methods,
+        fulfilment=APP.fulfilment,
+    )
+
+
+def test_a_bank_transfer_is_issued_once_it_is_paid(ada: Customer) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "bank_transfer")
+
+    paid = mark_paid(booking.id, fulfilment=APP.fulfilment)
+
+    assert paid.status == BookingStatus.PAID
+    assert paid.invoice_number == "INV-000001"
+    assert load_booking(booking.id) == paid
+
+
+def test_only_a_booking_awaiting_payment_can_be_marked_paid(
+    ada: Customer,
+) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+
+    with pytest.raises(BookingStatusError):
+        mark_paid(booking.id, fulfilment=APP.fulfilment)
+
+
+def test_a_paid_booking_can_be_checked_in(ada: Customer) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+
+    assert check_in(booking.id).status == BookingStatus.CHECKED_IN
+
+
+def test_a_booking_cannot_be_checked_in_twice(ada: Customer) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+    check_in(booking.id)
+
+    with pytest.raises(BookingStatusError):
+        check_in(booking.id)
+
+
+def test_cancelling_an_unpaid_booking_gives_the_places_back(
+    ada: Customer,
+) -> None:
+    booking = book(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
+
+    assert cancel(booking.id).status == BookingStatus.CANCELLED
+    assert PLACES["GDF0320"] == 2
+
+
+def test_cancelling_a_paid_booking_refunds_it(ada: Customer) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+
+    assert cancel(booking.id).status == BookingStatus.REFUNDED
+    assert PLACES["MUC0314"] == 120
+    assert fakevenue.SEATS["MUC0314"] == 120
+
+
+def test_a_booking_that_has_been_used_cannot_be_cancelled(
+    ada: Customer,
+) -> None:
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+    check_in(booking.id)
+
+    with pytest.raises(BookingStatusError):
+        cancel(booking.id)

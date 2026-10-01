@@ -48,3 +48,17 @@ def test_a_declined_card_is_explained_to_the_customer(
 
     assert status == 1
     assert "Error: Your card was declined." in capsys.readouterr().err
+
+
+def test_a_booking_can_be_cancelled(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(
+        "book --name Ada --email ada@example.com --pay bank_transfer"
+        " MUC0314-ADULT:2".split()
+    )
+    booking_id = capsys.readouterr().out.split()[1]
+
+    assert main(["cancel", booking_id]) == 0
+
+    assert f"Booking {booking_id} is cancelled." in capsys.readouterr().out

@@ -21,6 +21,10 @@ class BankTransferPayment:
             status=PaymentStatus.AWAITING_PAYMENT,
         )
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        # Finance pay the money back by hand, quoting the same reference.
+        pass
+
     def fee(self, amount: Decimal) -> Decimal:
         return Decimal("0.00")
 

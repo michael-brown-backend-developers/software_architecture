@@ -125,6 +125,14 @@ class FulfilmentUnavailableError(FulfilmentError, TransientError):
     """Part of issuing the tickets is not answering. Later might work."""
 
 
+class BookingStatusError(StageDoorError):
+    """A booking cannot do that, because of where it has got to."""
+
+    def __init__(self, booking_id: str, reason: str) -> None:
+        super().__init__(f"Booking {booking_id} {reason}")
+        self.booking_id = booking_id
+
+
 class SettingsError(StageDoorError):
     """A setting StageDoor cannot run without is missing."""
 

@@ -1,26 +1,32 @@
 """Making bookings."""
 
 from collections.abc import Mapping
-from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from stagedoor.bus import EventBus
-from stagedoor.capacity import check_places, take_places
+from stagedoor.capacity import check_places, give_back_places, take_places
 from stagedoor.catalogue import get_item
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
+    BookingStatusError,
     EmptyBookingError,
     InvalidQuantityError,
     MissingAddressError,
 )
 from stagedoor.fulfilment import Fulfilment
-from stagedoor.models import Booking, BookingLine, Customer, PaymentStatus
+from stagedoor.models import (
+    Booking,
+    BookingLine,
+    BookingStatus,
+    Customer,
+    PaymentStatus,
+)
 from stagedoor.notifications import send_confirmation
 from stagedoor.payments import get_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.pricing import price_booking
-from stagedoor.storage import save_booking
+from stagedoor.storage import load_booking, save_booking
 
 
 def place_booking(
@@ -71,21 +77,18 @@ def place_booking(
         vat=totals.vat,
         payment_method=payment_method,
         payment_reference=payment.reference,
-        payment_status=payment.status,
+        status=(
+            BookingStatus.PAID
+            if payment.status is PaymentStatus.PAID
+            else BookingStatus.AWAITING_PAYMENT
+        ),
         payment_fee=method.fee(totals.total),
         placed_at=datetime.now(UTC),
     )
 
     # Issue the tickets, now that they are paid for.
-    if payment.status is PaymentStatus.PAID:
-        issued = fulfilment.fulfil(booking)
-        booking = replace(
-            booking,
-            hold_references=issued.hold_references,
-            wallet_pass=issued.wallet_pass,
-            tracking_number=issued.tracking_number,
-            invoice_number=issued.invoice_number,
-        )
+    if booking.status == BookingStatus.PAID:
+        _issue_tickets(booking, fulfilment)
 
     take_places(lines)
     save_booking(booking)
@@ -100,6 +103,61 @@ def place_booking(
     )
 
     return booking
+
+
+def mark_paid(booking_id: str, *, fulfilment: Fulfilment) -> Booking:
+    """The customer's bank transfer has arrived: issue their tickets."""
+    booking = load_booking(booking_id)
+    if booking.status != BookingStatus.AWAITING_PAYMENT:
+        raise BookingStatusError(booking.id, "is not waiting to be paid")
+    booking.status = BookingStatus.PAID
+    _issue_tickets(booking, fulfilment)
+    save_booking(booking)
+    return booking
+
+
+def check_in(booking_id: str) -> Booking:
+    """The customer is at the door: let them in."""
+    booking = load_booking(booking_id)
+    if booking.status == BookingStatus.CHECKED_IN:
+        raise BookingStatusError(booking.id, "has already been checked in")
+    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REFUNDED):
+        raise BookingStatusError(booking.id, "has been cancelled")
+    booking.status = BookingStatus.CHECKED_IN
+    save_booking(booking)
+    return booking
+
+
+def cancel_booking(
+    booking_id: str,
+    *,
+    payment_methods: Mapping[str, PaymentMethod],
+    fulfilment: Fulfilment,
+) -> Booking:
+    """Call a booking off. If it has been paid for, give the money back."""
+    booking = load_booking(booking_id)
+    if booking.status == BookingStatus.CHECKED_IN:
+        raise BookingStatusError(booking.id, "has already been used")
+    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REFUNDED):
+        raise BookingStatusError(booking.id, "has already been cancelled")
+    if booking.status == BookingStatus.PAID:
+        method = get_payment_method(booking.payment_method, payment_methods)
+        method.refund(booking.payment_reference, booking.total)
+        fulfilment.release(booking)
+        booking.status = BookingStatus.REFUNDED
+    else:
+        booking.status = BookingStatus.CANCELLED
+    give_back_places(booking.lines)
+    save_booking(booking)
+    return booking
+
+
+def _issue_tickets(booking: Booking, fulfilment: Fulfilment) -> None:
+    issued = fulfilment.fulfil(booking)
+    booking.hold_references = issued.hold_references
+    booking.wallet_pass = issued.wallet_pass
+    booking.tracking_number = issued.tracking_number
+    booking.invoice_number = issued.invoice_number
 
 
 def _booking_line(code: str, quantity: int) -> BookingLine:

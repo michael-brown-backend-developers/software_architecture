@@ -32,6 +32,9 @@ class RetryingPaymentMethod:
     ) -> PaymentResult:
         return self._charge(amount, booking_id, token)
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        self.inner.refund(reference, amount)
+
     def fee(self, amount: Decimal) -> Decimal:
         return self.inner.fee(amount)
 
@@ -50,6 +53,9 @@ class LoggingPaymentMethod:
         self, amount: Decimal, booking_id: str, token: str | None
     ) -> PaymentResult:
         return self._charge(amount, booking_id, token)
+
+    def refund(self, reference: str, amount: Decimal) -> None:
+        self.inner.refund(reference, amount)
 
     def fee(self, amount: Decimal) -> Decimal:
         return self.inner.fee(amount)

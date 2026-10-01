@@ -8,9 +8,9 @@ from stagedoor.models import (
     Address,
     Booking,
     BookingLine,
+    BookingStatus,
     Customer,
     ItemKind,
-    PaymentStatus,
 )
 from stagedoor.storage import load_booking, save_booking
 
@@ -42,7 +42,7 @@ def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
         vat=Decimal("10.02"),
         payment_method="card",
         payment_reference="pi_123",
-        payment_status=PaymentStatus.PAID,
+        status=BookingStatus.PAID,
         payment_fee=Decimal("1.10"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
         hold_references=("H-1234567890",),

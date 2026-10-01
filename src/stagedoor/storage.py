@@ -16,9 +16,9 @@ from stagedoor.models import (
     Address,
     Booking,
     BookingLine,
+    BookingStatus,
     Customer,
     ItemKind,
-    PaymentStatus,
 )
 
 
@@ -70,7 +70,7 @@ def _to_dict(booking: Booking) -> dict[str, Any]:
         "vat": str(booking.vat),
         "payment_method": booking.payment_method,
         "payment_reference": booking.payment_reference,
-        "payment_status": booking.payment_status.value,
+        "status": booking.status.value,
         "payment_fee": str(booking.payment_fee),
         "placed_at": booking.placed_at.isoformat(),
         "hold_references": list(booking.hold_references),
@@ -108,7 +108,7 @@ def _from_dict(data: dict[str, Any]) -> Booking:
         vat=Decimal(data["vat"]),
         payment_method=data["payment_method"],
         payment_reference=data["payment_reference"],
-        payment_status=PaymentStatus(data["payment_status"]),
+        status=BookingStatus(data["status"]),
         payment_fee=Decimal(data["payment_fee"]),
         placed_at=datetime.fromisoformat(data["placed_at"]),
         hold_references=tuple(data["hold_references"]),

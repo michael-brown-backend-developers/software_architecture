@@ -21,6 +21,16 @@ class PaymentStatus(StrEnum):
     AWAITING_PAYMENT = "awaiting_payment"
 
 
+class BookingStatus(StrEnum):
+    """Where a booking has got to."""
+
+    AWAITING_PAYMENT = "awaiting_payment"
+    PAID = "paid"
+    CHECKED_IN = "checked_in"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+
 @dataclass(frozen=True)
 class Item:
     """Something we sell. The price includes VAT.
@@ -72,12 +82,13 @@ class BookingLine:
         return self.unit_price * self.quantity
 
 
-@dataclass(frozen=True)
+@dataclass
 class Booking:
     """A customer's booking.
 
     ``total`` is ``subtotal`` minus ``discount``, plus ``delivery_fee``.
-    ``vat`` is the VAT included in ``total``, not added to it.
+    ``vat`` is the VAT included in ``total``, not added to it. ``status``
+    changes as the booking is paid for, used, or cancelled.
     """
 
     id: str
@@ -92,7 +103,7 @@ class Booking:
     vat: Decimal
     payment_method: str
     payment_reference: str
-    payment_status: PaymentStatus
+    status: BookingStatus
     payment_fee: Decimal
     placed_at: datetime
     hold_references: tuple[str, ...] = ()

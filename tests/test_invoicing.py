@@ -3,7 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from stagedoor.invoicing import create_invoice
-from stagedoor.models import Booking, Customer, PaymentStatus
+from stagedoor.models import Booking, BookingStatus, Customer
 
 
 def test_invoice_numbers_follow_on_with_no_gaps(
@@ -22,7 +22,7 @@ def test_invoice_numbers_follow_on_with_no_gaps(
         vat=Decimal("3.00"),
         payment_method="card",
         payment_reference="pi_123",
-        payment_status=PaymentStatus.PAID,
+        status=BookingStatus.PAID,
         payment_fee=Decimal("0.47"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
     )

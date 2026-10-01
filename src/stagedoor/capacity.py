@@ -39,3 +39,10 @@ def take_places(lines: Sequence[BookingLine]) -> None:
     for line in lines:
         if line.performance is not None:
             PLACES[line.performance] -= line.quantity
+
+
+def give_back_places(lines: Sequence[BookingLine]) -> None:
+    """Put the places back on sale."""
+    for line in lines:
+        if line.performance is not None:
+            PLACES[line.performance] += line.quantity

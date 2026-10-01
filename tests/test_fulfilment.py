@@ -16,9 +16,9 @@ from stagedoor.models import (
     Address,
     Booking,
     BookingLine,
+    BookingStatus,
     Customer,
     ItemKind,
-    PaymentStatus,
 )
 
 
@@ -49,7 +49,7 @@ def booking_for(
         vat=Decimal("10.00"),
         payment_method="card",
         payment_reference="pi_123",
-        payment_status=PaymentStatus.PAID,
+        status=BookingStatus.PAID,
         payment_fee=Decimal("1.10"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
     )

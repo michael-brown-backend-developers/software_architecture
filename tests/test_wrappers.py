@@ -29,6 +29,9 @@ class FlakyPayment:
             raise PaymentUnavailableError("Flaky")
         return PaymentResult(reference="ref-1", status=PaymentStatus.PAID)
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        pass
+
     def fee(self, amount: Decimal) -> Decimal:
         return Decimal("0.42")
 

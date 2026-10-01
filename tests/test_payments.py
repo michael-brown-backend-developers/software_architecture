@@ -10,7 +10,7 @@ from stagedoor.exceptions import (
     PaymentUnavailableError,
     UnknownPaymentMethodError,
 )
-from stagedoor.models import Booking, Customer, PaymentStatus
+from stagedoor.models import Booking, BookingStatus, Customer, PaymentStatus
 from stagedoor.payments import get_payment_method
 from stagedoor.payments.bank_transfer import BankTransferPayment
 from stagedoor.payments.paypal import PayPalPayment
@@ -95,7 +95,7 @@ def test_a_bank_transfer_tells_the_customer_how_to_pay(ada: Customer) -> None:
         vat=Decimal("0.00"),
         payment_method="bank_transfer",
         payment_reference="SD-ABC123",
-        payment_status=PaymentStatus.AWAITING_PAYMENT,
+        status=BookingStatus.AWAITING_PAYMENT,
         payment_fee=Decimal("0.00"),
         placed_at=datetime(2026, 9, 30, 9, 15, tzinfo=UTC),
     )
@@ -127,3 +127,24 @@ def test_charging_the_same_booking_twice_charges_once() -> None:
     second = card.charge(AMOUNT, "abc123", "pm_card_visa")
 
     assert first.reference == second.reference
+
+
+def test_a_card_payment_can_be_refunded() -> None:
+    card = StripeCardPayment(api_key="sk_test")
+    payment = card.charge(AMOUNT, "abc123", "pm_card_visa")
+
+    card.refund(payment.reference, AMOUNT)
+
+
+def test_a_refund_while_stripe_is_unreachable_is_unavailable() -> None:
+    fakestripe.simulate_outage = True
+
+    with pytest.raises(PaymentUnavailableError):
+        StripeCardPayment(api_key="sk_test").refund("pi_123", AMOUNT)
+
+
+def test_a_paypal_payment_can_be_refunded() -> None:
+    paypal = PayPalPayment(client_id="id", secret="secret")
+    payment = paypal.charge(AMOUNT, "abc123", "payer_ok")
+
+    paypal.refund(payment.reference, AMOUNT)

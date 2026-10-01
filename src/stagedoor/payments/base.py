@@ -36,6 +36,10 @@ class PaymentMethod(Protocol):
         """
         ...
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        """Give back ``amount`` of the payment with this ``reference``."""
+        ...
+
     def fee(self, amount: Decimal) -> Decimal:
         """What the provider charges us for taking ``amount``."""
         ...

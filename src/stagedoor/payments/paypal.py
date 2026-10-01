@@ -34,6 +34,12 @@ class PayPalPayment:
             raise PaymentFailedError("PayPal declined the payment.")
         return PaymentResult(reference=answer["id"], status=PaymentStatus.PAID)
 
+    def refund(self, reference: str, amount: Decimal) -> None:
+        # PayPal only gives back the whole of a payment.
+        answer = self.client.refund(reference)
+        if answer["status"] != "COMPLETED":
+            raise PaymentFailedError("PayPal would not give the money back.")
+
     def fee(self, amount: Decimal) -> Decimal:
         return percentage(amount, "0.029") + Decimal("0.30")
 
