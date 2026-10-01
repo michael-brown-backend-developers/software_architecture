@@ -16,12 +16,6 @@ import os
 import sys
 from collections.abc import Mapping
 
-from stagedoor.bookings import (
-    cancel_booking,
-    check_in,
-    mark_paid,
-    place_booking,
-)
 from stagedoor.bootstrap import bootstrap
 from stagedoor.catalogue import list_items
 from stagedoor.delivery import DELIVERY_PRICING
@@ -29,7 +23,6 @@ from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Address, Customer
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.settings import Settings
-from stagedoor.storage import load_booking
 
 
 def _parse_item(text: str) -> tuple[str, int]:
@@ -104,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{item.code:<14} £{item.price:>6}  {item.name}")
 
         elif args.command == "book":
-            booking = place_booking(
+            booking = app.bookings.place(
                 Customer(
                     name=args.name, email=args.email, address=args.address
                 ),
@@ -113,30 +106,23 @@ def main(argv: list[str] | None = None) -> int:
                 payment_token=args.token,
                 discount_code=args.discount,
                 delivery=args.delivery,
-                payment_methods=app.payment_methods,
-                fulfilment=app.fulfilment,
-                bus=app.bus,
             )
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 
         elif args.command == "paid":
-            booking = mark_paid(args.booking_id, fulfilment=app.fulfilment)
+            booking = app.bookings.mark_paid(args.booking_id)
             print(f"Booking {booking.id} is paid. Tickets issued.")
 
         elif args.command == "check-in":
-            booking = check_in(args.booking_id)
+            booking = app.bookings.check_in(args.booking_id)
             print(f"Booking {booking.id} checked in. Enjoy the show.")
 
         elif args.command == "cancel":
-            booking = cancel_booking(
-                args.booking_id,
-                payment_methods=app.payment_methods,
-                fulfilment=app.fulfilment,
-            )
+            booking = app.bookings.cancel(args.booking_id)
             print(f"Booking {booking.id} is {booking.status}.")
 
         elif args.command == "booking":
-            booking = load_booking(args.booking_id)
+            booking = app.bookings.get(args.booking_id)
             customer = booking.customer
             print(
                 f"Booking {booking.id} for {customer.name} <{customer.email}>"

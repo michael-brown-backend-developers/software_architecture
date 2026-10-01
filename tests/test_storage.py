@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -12,10 +13,12 @@ from stagedoor.models import (
     Customer,
     ItemKind,
 )
-from stagedoor.storage import load_booking, save_booking
+from stagedoor.storage import BookingStore
 
 
-def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
+def test_a_booking_survives_a_round_trip(
+    ada: Customer, tmp_path: Path
+) -> None:
     booking = Booking(
         id="abc123",
         customer=Customer(
@@ -50,11 +53,12 @@ def test_a_booking_survives_a_round_trip(ada: Customer) -> None:
         invoice_number="INV-000042",
     )
 
-    save_booking(booking)
+    store = BookingStore(tmp_path)
+    store.save(booking)
 
-    assert load_booking("abc123") == booking
+    assert store.load("abc123") == booking
 
 
-def test_loading_a_missing_booking_raises() -> None:
+def test_loading_a_missing_booking_raises(tmp_path: Path) -> None:
     with pytest.raises(BookingNotFoundError):
-        load_booking("does-not-exist")
+        BookingStore(tmp_path).load("does-not-exist")

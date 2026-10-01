@@ -56,11 +56,17 @@ def booking_for(
 
 
 @pytest.fixture
-def fulfilment() -> Fulfilment:
+def waits() -> list[float]:
+    """How long each retry waited. Nothing really waits."""
+    return []
+
+
+@pytest.fixture
+def fulfilment(waits: list[float]) -> Fulfilment:
     return Fulfilment(
-        venue=VenueHolds("https://venue.test", "key"),
+        venue=VenueHolds("https://venue.test", "key", sleep=waits.append),
         wallet=WalletPasses("key"),
-        royal_mail=RoyalMailShipping("key"),
+        royal_mail=RoyalMailShipping("key", sleep=waits.append),
     )
 
 
@@ -154,7 +160,7 @@ def test_posting_to_the_eu_uses_royal_mails_eu_service(
 
 
 def test_a_brief_royal_mail_outage_is_tried_again(
-    fulfilment: Fulfilment, ada_at_home: Customer
+    fulfilment: Fulfilment, ada_at_home: Customer, waits: list[float]
 ) -> None:
     fakeroyalmail.simulate_outage = 1
 
@@ -163,10 +169,11 @@ def test_a_brief_royal_mail_outage_is_tried_again(
     )
 
     assert result.tracking_number is not None
+    assert waits == [0.5]
 
 
 def test_a_brief_venue_outage_is_tried_again(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: Fulfilment, ada: Customer, waits: list[float]
 ) -> None:
     fakevenue.simulate_outage = 1
 
@@ -175,3 +182,4 @@ def test_a_brief_venue_outage_is_tried_again(
     )
 
     assert len(result.hold_references) == 1
+    assert waits == [1.0]

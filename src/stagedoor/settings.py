@@ -6,6 +6,7 @@ when StageDoor starts, and handed to whatever needs them.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from stagedoor.exceptions import SettingsError
 
@@ -25,6 +26,8 @@ class Settings:
     venue_api_key: str
     wallet_api_key: str
     royal_mail_api_key: str
+    data_dir: Path
+    mail_dir: Path
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> Settings:
@@ -57,4 +60,6 @@ class Settings:
             venue_api_key=key("VENUE_API_KEY", "venue-test-key"),
             wallet_api_key=key("WALLET_API_KEY", "wallet-test-key"),
             royal_mail_api_key=key("ROYAL_MAIL_API_KEY", "rm-test-key"),
+            data_dir=Path(env.get("STAGEDOOR_DATA_DIR", "data")),
+            mail_dir=Path(env.get("STAGEDOOR_MAIL_DIR", "mail")),
         )

@@ -1,26 +1,33 @@
 """Telling customers what has happened.
 
-StageDoor does not send real email yet. Each "email" is a text file in the
-mail directory, which comes from the STAGEDOOR_MAIL_DIR environment
-variable, or ./mail if it is not set. Open the file and you can see exactly
-what the customer would have received.
+StageDoor does not send real email yet. Each "email" is a text file in a
+mail directory. Open the file and you can see exactly what the customer
+would have received.
 """
 
-import os
 from pathlib import Path
 
 from stagedoor.models import Booking
 from stagedoor.payments.base import PaymentMethod
 
 
-def _mail_dir() -> Path:
-    directory = Path(os.environ.get("STAGEDOOR_MAIL_DIR", "mail"))
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
+class Mailer:
+    """Sends customers their email, as files in one directory."""
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+
+    def send_confirmation(
+        self, booking: Booking, payment_method: PaymentMethod
+    ) -> None:
+        """Send the customer a confirmation of their booking."""
+        body = _confirmation(booking, payment_method)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        path = self.directory / f"{booking.id}-confirmation.txt"
+        path.write_text(body, encoding="utf-8")
 
 
-def send_confirmation(booking: Booking, payment_method: PaymentMethod) -> None:
-    """Send the customer a confirmation of their booking."""
+def _confirmation(booking: Booking, payment_method: PaymentMethod) -> str:
     lines = "\n".join(
         f"  {line.quantity} x {line.name} @ £{line.unit_price}"
         f" = £{line.line_total}"
@@ -34,7 +41,7 @@ def send_confirmation(booking: Booking, payment_method: PaymentMethod) -> None:
 
     payment = payment_method.describe(booking)
 
-    body = (
+    return (
         f"To: {booking.customer.email}\n"
         f"Subject: Your StageDoor booking {booking.id}\n"
         f"\n"
@@ -51,5 +58,3 @@ def send_confirmation(booking: Booking, payment_method: PaymentMethod) -> None:
         f"\n"
         f"{payment}\n"
     )
-    path = _mail_dir() / f"{booking.id}-confirmation.txt"
-    path.write_text(body, encoding="utf-8")

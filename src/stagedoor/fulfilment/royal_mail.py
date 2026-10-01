@@ -5,6 +5,9 @@ out what Royal Mail needs - the weight, the postcode and country, and the
 right service code - and turns Royal Mail's errors into ours.
 """
 
+import time
+from collections.abc import Callable
+
 import fakeroyalmail
 
 from stagedoor.catalogue import get_item
@@ -24,13 +27,19 @@ SERVICES = {"UK": "TPN48", "EU": "INT-EU", "WORLD": "INT-ROW"}
 class RoyalMailShipping:
     """Posted tickets, sent by Royal Mail."""
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(
+        self, api_key: str, sleep: Callable[[float], None] = time.sleep
+    ) -> None:
         self.client = fakeroyalmail.RoyalMailClient(api_key)
+        self._post = timed("Royal Mail shipment")(
+            retry(attempts=3, base_delay=0.5, sleep=sleep)(self._post_once)
+        )
 
-    @timed("Royal Mail shipment")
-    @retry(attempts=3, base_delay=0.5)
     def post(self, booking: Booking) -> str:
         """Book the postage for a booking, and return the tracking number."""
+        return self._post(booking)
+
+    def _post_once(self, booking: Booking) -> str:
         address = booking.customer.address
         if address is None:
             raise MissingAddressError()

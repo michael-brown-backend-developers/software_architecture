@@ -6,9 +6,13 @@ import fakestripe
 import fakevenue
 import fakewallet
 import pytest
+from fakes import no_sleep
 
+from stagedoor.bookings import BookingService
+from stagedoor.bootstrap import App, bootstrap
 from stagedoor.capacity import PLACES
 from stagedoor.models import Address, Customer
+from stagedoor.settings import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +23,28 @@ def isolated_directories(
     monkeypatch.setenv("STAGEDOOR_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("STAGEDOOR_MAIL_DIR", str(tmp_path / "mail"))
     return tmp_path
+
+
+@pytest.fixture
+def settings(isolated_directories: Path) -> Settings:
+    """Development settings, with the test's own data and mail directories."""
+    return Settings.from_env(
+        {
+            "STAGEDOOR_DATA_DIR": str(isolated_directories / "data"),
+            "STAGEDOOR_MAIL_DIR": str(isolated_directories / "mail"),
+        }
+    )
+
+
+@pytest.fixture
+def app(settings: Settings) -> App:
+    """StageDoor as it runs in development, except that retries never wait."""
+    return bootstrap(settings, sleep=no_sleep)
+
+
+@pytest.fixture
+def service(app: App) -> BookingService:
+    return app.bookings
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,9 @@ This is the only module in StageDoor that knows the venue's API. It holds
 the seats for every performance on a booking, and gives them back.
 """
 
+import time
 from collections import Counter
+from collections.abc import Callable
 
 import fakevenue
 
@@ -16,8 +18,18 @@ from stagedoor.resilience import retry, timed
 class VenueHolds:
     """Seats held for us in the venue's system."""
 
-    def __init__(self, base_url: str, api_key: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self.client = fakevenue.VenueClient(base_url, api_key)
+        # Wrapped here, where the adapter is built, so that whoever builds
+        # it decides how long a retry waits.
+        self._hold = timed("Venue hold")(
+            retry(attempts=2, base_delay=1.0, sleep=sleep)(self._hold_once)
+        )
 
     def hold(self, booking: Booking) -> tuple[str, ...]:
         """Hold the seats for every ticket on a booking.
@@ -39,9 +51,7 @@ class VenueHolds:
             raise
         return tuple(holds)
 
-    @timed("Venue hold")
-    @retry(attempts=2, base_delay=1.0)
-    def _hold(self, performance: str, count: int) -> str:
+    def _hold_once(self, performance: str, count: int) -> str:
         try:
             return self.client.create_hold(performance, count)["holdRef"]
         except fakevenue.VenueAPIError as error:

@@ -10,7 +10,8 @@ create_payment_method() is the one place that knows how each way of paying
 is built, from the settings.
 """
 
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 
 from stagedoor.exceptions import UnknownPaymentMethodError
 from stagedoor.payments.bank_transfer import BankTransferPayment
@@ -24,13 +25,20 @@ from stagedoor.payments.wrappers import (
 from stagedoor.settings import Settings
 
 
-def create_payment_method(name: str, settings: Settings) -> PaymentMethod:
-    """Build the payment method called ``name``, ready to use."""
+def create_payment_method(
+    name: str,
+    settings: Settings,
+    sleep: Callable[[float], None] = time.sleep,
+) -> PaymentMethod:
+    """Build the payment method called ``name``, ready to use.
+
+    ``sleep`` is how a payment method waits before it tries again.
+    """
     match name:
         case "card":
             return LoggingPaymentMethod(
                 RetryingPaymentMethod(
-                    StripeCardPayment(settings.stripe_api_key)
+                    StripeCardPayment(settings.stripe_api_key), sleep=sleep
                 ),
                 "Stripe charge",
             )

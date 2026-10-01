@@ -1,11 +1,10 @@
 """Saving and loading bookings.
 
-Each booking is a JSON file in the data directory. The directory comes from
-the STAGEDOOR_DATA_DIR environment variable, or ./data if it is not set.
+Each booking is a JSON file in a directory. Which directory is decided by
+whoever builds the store, so a test can give it one of its own.
 """
 
 import json
-import os
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -22,24 +21,24 @@ from stagedoor.models import (
 )
 
 
-def _bookings_dir() -> Path:
-    directory = Path(os.environ.get("STAGEDOOR_DATA_DIR", "data")) / "bookings"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
+class BookingStore:
+    """Bookings, kept as JSON files in one directory."""
 
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
 
-def save_booking(booking: Booking) -> None:
-    """Write a booking to disk, replacing any earlier copy."""
-    path = _bookings_dir() / f"{booking.id}.json"
-    path.write_text(json.dumps(_to_dict(booking), indent=2))
+    def save(self, booking: Booking) -> None:
+        """Write a booking to disk, replacing any earlier copy."""
+        self.directory.mkdir(parents=True, exist_ok=True)
+        path = self.directory / f"{booking.id}.json"
+        path.write_text(json.dumps(_to_dict(booking), indent=2))
 
-
-def load_booking(booking_id: str) -> Booking:
-    """Read a booking back from disk."""
-    path = _bookings_dir() / f"{booking_id}.json"
-    if not path.exists():
-        raise BookingNotFoundError(booking_id)
-    return _from_dict(json.loads(path.read_text()))
+    def load(self, booking_id: str) -> Booking:
+        """Read a booking back from disk."""
+        path = self.directory / f"{booking_id}.json"
+        if not path.exists():
+            raise BookingNotFoundError(booking_id)
+        return _from_dict(json.loads(path.read_text()))
 
 
 def _to_dict(booking: Booking) -> dict[str, Any]:
