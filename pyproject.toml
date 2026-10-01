@@ -14,6 +14,9 @@ packages = [
     { include = "stagedoor", from = "src" },
     { include = "fakestripe", from = "src" },
     { include = "fakepaypal", from = "src" },
+    { include = "fakevenue", from = "src" },
+    { include = "fakewallet", from = "src" },
+    { include = "fakeroyalmail", from = "src" },
 ]
 
 [build-system]
@@ -37,7 +40,13 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 # They live in src/, but they stand in for other people's libraries.
-known-third-party = ["fakestripe", "fakepaypal"]
+known-third-party = [
+    "fakestripe",
+    "fakepaypal",
+    "fakevenue",
+    "fakewallet",
+    "fakeroyalmail",
+]
 
 [dependency-groups]
 dev = [
