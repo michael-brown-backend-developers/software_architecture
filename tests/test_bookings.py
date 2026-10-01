@@ -1,8 +1,13 @@
+import contextlib
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest import mock
+from uuid import UUID
 
+import fakestripe
 import fakevenue
 import pytest
 
@@ -340,3 +345,64 @@ def test_a_booking_that_has_been_used_cannot_be_cancelled(
 
     with pytest.raises(IllegalTransitionError):
         cancel(booking.id)
+
+
+# Written after a customer was charged for a booking that was never saved.
+
+NOON = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+
+
+@mock.patch("stagedoor.bookings.datetime")
+def test_a_booking_records_when_it_was_made(
+    mock_datetime: mock.MagicMock, ada: Customer
+) -> None:
+    mock_datetime.now.return_value = NOON
+
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+
+    assert booking.placed_at == NOON
+
+
+@mock.patch(
+    "stagedoor.bookings.uuid4",
+    return_value=UUID("3f9a1c2b-7d4e-4a5b-8c6d-0e1f2a3b4c5d"),
+)
+def test_a_bank_transfer_is_paid_by_quoting_the_booking_id(
+    _uuid4: mock.MagicMock, ada: Customer
+) -> None:
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+
+    assert booking.payment_reference == "SD-3F9A1C2B7D4E"
+
+
+@mock.patch("uuid.uuid4", return_value=UUID(int=0))
+@mock.patch("stagedoor.storage.save_booking", side_effect=OSError("full"))
+def test_a_booking_that_cannot_be_saved_is_not_confirmed(
+    _save: mock.MagicMock,
+    _uuid4: mock.MagicMock,
+    ada: Customer,
+    isolated_directories: Path,
+) -> None:
+    with contextlib.suppress(OSError):
+        book(ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa")
+
+    mail = isolated_directories / "mail"
+    assert not (mail / "000000000000-confirmation.txt").exists()
+
+
+def test_a_booking_survives_a_busy_moment_at_stripe(ada: Customer) -> None:
+    fakestripe.simulate_outage = 2
+
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa")
+
+    assert booking.payment_reference.startswith("pi_")
+
+
+def test_a_booking_survives_a_busy_moment_at_the_venue(
+    ada: Customer,
+) -> None:
+    fakevenue.simulate_outage = 1
+
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+
+    assert len(booking.hold_references) == 1
