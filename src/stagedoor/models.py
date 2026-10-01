@@ -5,6 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
+from stagedoor.exceptions import IllegalTransitionError
+
 
 class ItemKind(StrEnum):
     """What kind of thing an item is. VAT depends on it."""
@@ -29,6 +31,20 @@ class BookingStatus(StrEnum):
     CHECKED_IN = "checked_in"
     CANCELLED = "cancelled"
     REFUNDED = "refunded"
+
+
+# Every status a booking can move to, from each status it can be in.
+ALLOWED_TRANSITIONS: dict[BookingStatus, frozenset[BookingStatus]] = {
+    BookingStatus.AWAITING_PAYMENT: frozenset(
+        {BookingStatus.PAID, BookingStatus.CANCELLED}
+    ),
+    BookingStatus.PAID: frozenset(
+        {BookingStatus.CHECKED_IN, BookingStatus.REFUNDED}
+    ),
+    BookingStatus.CHECKED_IN: frozenset(),
+    BookingStatus.CANCELLED: frozenset(),
+    BookingStatus.REFUNDED: frozenset(),
+}
 
 
 @dataclass(frozen=True)
@@ -110,3 +126,24 @@ class Booking:
     wallet_pass: str | None = None
     tracking_number: str | None = None
     invoice_number: str | None = None
+
+    def mark_paid(self) -> None:
+        """The customer's money has arrived."""
+        self._move_to(BookingStatus.PAID)
+
+    def check_in(self) -> None:
+        """The customer is at the door."""
+        self._move_to(BookingStatus.CHECKED_IN)
+
+    def cancel(self) -> None:
+        """Call the booking off. A paid booking is refunded."""
+        match self.status:
+            case BookingStatus.PAID:
+                self._move_to(BookingStatus.REFUNDED)
+            case _:
+                self._move_to(BookingStatus.CANCELLED)
+
+    def _move_to(self, status: BookingStatus) -> None:
+        if status not in ALLOWED_TRANSITIONS[self.status]:
+            raise IllegalTransitionError(self.id, self.status, status)
+        self.status = status

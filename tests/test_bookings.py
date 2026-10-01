@@ -17,9 +17,9 @@ from stagedoor.bus import EventBus
 from stagedoor.capacity import PLACES
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
-    BookingStatusError,
     EmptyBookingError,
     FulfilmentError,
+    IllegalTransitionError,
     InvalidQuantityError,
     MissingAddressError,
     NotEnoughPlacesError,
@@ -297,7 +297,7 @@ def test_only_a_booking_awaiting_payment_can_be_marked_paid(
 ) -> None:
     booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
 
-    with pytest.raises(BookingStatusError):
+    with pytest.raises(IllegalTransitionError):
         mark_paid(booking.id, fulfilment=APP.fulfilment)
 
 
@@ -311,7 +311,7 @@ def test_a_booking_cannot_be_checked_in_twice(ada: Customer) -> None:
     booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
     check_in(booking.id)
 
-    with pytest.raises(BookingStatusError):
+    with pytest.raises(IllegalTransitionError):
         check_in(booking.id)
 
 
@@ -338,5 +338,5 @@ def test_a_booking_that_has_been_used_cannot_be_cancelled(
     booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
     check_in(booking.id)
 
-    with pytest.raises(BookingStatusError):
+    with pytest.raises(IllegalTransitionError):
         cancel(booking.id)
