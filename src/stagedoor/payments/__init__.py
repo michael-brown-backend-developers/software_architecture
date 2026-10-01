@@ -6,11 +6,11 @@ customer, without knowing which way the customer chose to pay - or which
 company takes the money. Each company's library is used in exactly one
 module: the adapter that translates it.
 
-Which ways of paying are switched on, and production's keys, come from
-environment variables. Everywhere else uses test keys.
+create_payment_method() is the one place that knows how each way of paying
+is built, from the settings.
 """
 
-import os
+from collections.abc import Mapping
 
 from stagedoor.exceptions import UnknownPaymentMethodError
 from stagedoor.payments.bank_transfer import BankTransferPayment
@@ -21,47 +21,36 @@ from stagedoor.payments.wrappers import (
     LoggingPaymentMethod,
     RetryingPaymentMethod,
 )
+from stagedoor.settings import Settings
 
-# Only production uses the real keys, and it must be given them. Everywhere
-# else uses test keys, whatever is set, so staging can never charge a card.
-LIVE = os.environ.get("STAGEDOOR_ENV") == "production"
 
-# Which ways of paying are switched on, for example "card,bank_transfer".
-ENABLED = os.environ.get(
-    "STAGEDOOR_PAYMENT_METHODS", "card,paypal,bank_transfer"
-).split(",")
-
-PAYMENT_METHODS: dict[str, PaymentMethod] = {}
-if "card" in ENABLED:
-    PAYMENT_METHODS["card"] = LoggingPaymentMethod(
-        RetryingPaymentMethod(
-            StripeCardPayment(
-                api_key=(
-                    os.environ["STRIPE_API_KEY"]
-                    if LIVE
-                    else "sk_test_stagedoor"
+def create_payment_method(name: str, settings: Settings) -> PaymentMethod:
+    """Build the payment method called ``name``, ready to use."""
+    match name:
+        case "card":
+            return LoggingPaymentMethod(
+                RetryingPaymentMethod(
+                    StripeCardPayment(settings.stripe_api_key)
                 ),
-            ),
-        ),
-        "Stripe charge",
-    )
-if "paypal" in ENABLED:
-    PAYMENT_METHODS["paypal"] = LoggingPaymentMethod(
-        PayPalPayment(
-            client_id=(
-                os.environ["PAYPAL_CLIENT_ID"] if LIVE else "stagedoor-sandbox"
-            ),
-            secret=os.environ["PAYPAL_SECRET"] if LIVE else "sandbox-secret",
-        ),
-        "PayPal charge",
-    )
-if "bank_transfer" in ENABLED:
-    PAYMENT_METHODS["bank_transfer"] = BankTransferPayment()
+                "Stripe charge",
+            )
+        case "paypal":
+            return LoggingPaymentMethod(
+                PayPalPayment(
+                    settings.paypal_client_id, settings.paypal_secret
+                ),
+                "PayPal charge",
+            )
+        case "bank_transfer":
+            return BankTransferPayment()
+    raise UnknownPaymentMethodError(name)
 
 
-def get_payment_method(name: str) -> PaymentMethod:
-    """The payment method a customer chose, by name."""
+def get_payment_method(
+    name: str, payment_methods: Mapping[str, PaymentMethod]
+) -> PaymentMethod:
+    """The payment method a customer chose, by name, if it is switched on."""
     try:
-        return PAYMENT_METHODS[name]
+        return payment_methods[name]
     except KeyError:
         raise UnknownPaymentMethodError(name) from None

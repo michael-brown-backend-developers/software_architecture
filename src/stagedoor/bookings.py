@@ -1,5 +1,6 @@
 """Making bookings."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -11,10 +12,11 @@ from stagedoor.exceptions import (
     InvalidQuantityError,
     MissingAddressError,
 )
-from stagedoor.fulfilment import FULFILMENT
+from stagedoor.fulfilment import Fulfilment
 from stagedoor.models import Booking, BookingLine, Customer, PaymentStatus
 from stagedoor.notifications import send_confirmation
 from stagedoor.payments import get_payment_method
+from stagedoor.payments.base import PaymentMethod
 from stagedoor.pricing import price_booking
 from stagedoor.storage import save_booking
 
@@ -26,10 +28,15 @@ def place_booking(
     payment_token: str | None = None,
     discount_code: str | None = None,
     delivery: str = "e_ticket",
+    *,
+    payment_methods: Mapping[str, PaymentMethod],
+    fulfilment: Fulfilment,
 ) -> Booking:
     """Make a booking for a customer.
 
-    ``items`` is a list of (code, quantity) pairs.
+    ``items`` is a list of (code, quantity) pairs. ``payment_methods`` are
+    the ways of paying that are switched on, and ``fulfilment`` issues the
+    tickets once a booking is paid for.
     """
     if not items:
         raise EmptyBookingError()
@@ -40,7 +47,7 @@ def place_booking(
     # Payment needs a reference before the booking exists, so the ID comes
     # first.
     booking_id = uuid4().hex[:12]
-    method = get_payment_method(payment_method)
+    method = get_payment_method(payment_method, payment_methods)
 
     lines = [_booking_line(code, quantity) for code, quantity in items]
     check_places(lines)
@@ -67,7 +74,7 @@ def place_booking(
 
     # Issue the tickets, now that they are paid for.
     if payment.status is PaymentStatus.PAID:
-        issued = FULFILMENT.fulfil(booking)
+        issued = fulfilment.fulfil(booking)
         booking = replace(
             booking,
             hold_references=issued.hold_references,
@@ -78,7 +85,7 @@ def place_booking(
 
     take_places(lines)
     save_booking(booking)
-    send_confirmation(booking)
+    send_confirmation(booking, method)
 
     return booking
 

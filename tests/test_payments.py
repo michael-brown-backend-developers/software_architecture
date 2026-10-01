@@ -108,7 +108,7 @@ def test_a_bank_transfer_tells_the_customer_how_to_pay(ada: Customer) -> None:
 
 def test_an_unknown_payment_method_is_rejected() -> None:
     with pytest.raises(UnknownPaymentMethodError):
-        get_payment_method("cash")
+        get_payment_method("cash", {})
 
 
 def test_an_unreachable_stripe_is_unavailable_not_declined() -> None:

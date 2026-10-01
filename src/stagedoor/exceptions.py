@@ -123,3 +123,11 @@ class FulfilmentError(StageDoorError):
 
 class FulfilmentUnavailableError(FulfilmentError, TransientError):
     """Part of issuing the tickets is not answering. Later might work."""
+
+
+class SettingsError(StageDoorError):
+    """A setting StageDoor cannot run without is missing."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name} must be set in production")
+        self.name = name

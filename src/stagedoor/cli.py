@@ -9,14 +9,18 @@ Usage::
 
 import argparse
 import logging
+import os
 import sys
+from collections.abc import Mapping
 
 from stagedoor.bookings import place_booking
+from stagedoor.bootstrap import bootstrap
 from stagedoor.catalogue import list_items
 from stagedoor.delivery import DELIVERY_PRICING
 from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Address, Customer
-from stagedoor.payments import PAYMENT_METHODS
+from stagedoor.payments.base import PaymentMethod
+from stagedoor.settings import Settings
 from stagedoor.storage import load_booking
 
 
@@ -39,7 +43,9 @@ def _parse_address(text: str) -> Address:
     return Address(*parts)
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(
+    payment_methods: Mapping[str, PaymentMethod],
+) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="stagedoor")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -48,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     book = commands.add_parser("book", help="make a booking")
     book.add_argument("--name", required=True)
     book.add_argument("--email", required=True)
-    book.add_argument("--pay", required=True, choices=PAYMENT_METHODS)
+    book.add_argument("--pay", required=True, choices=payment_methods)
     book.add_argument("--token", help="card or PayPal payment token")
     book.add_argument("--discount", metavar="CODE")
     book.add_argument(
@@ -72,10 +78,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     try:
+        app = bootstrap(Settings.from_env(os.environ))
+        args = _build_parser(app.payment_methods).parse_args(argv)
+
         if args.command == "whats-on":
             for item in list_items():
                 print(f"{item.code:<14} £{item.price:>6}  {item.name}")
@@ -90,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
                 payment_token=args.token,
                 discount_code=args.discount,
                 delivery=args.delivery,
+                payment_methods=app.payment_methods,
+                fulfilment=app.fulfilment,
             )
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 

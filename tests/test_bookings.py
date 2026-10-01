@@ -1,11 +1,13 @@
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import fakevenue
 import pytest
 
 from stagedoor.bookings import place_booking
+from stagedoor.bootstrap import bootstrap
 from stagedoor.capacity import PLACES
 from stagedoor.exceptions import (
     EmptyBookingError,
@@ -17,12 +19,25 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.models import Address, Customer, PaymentStatus
+from stagedoor.models import Address, Booking, Customer, PaymentStatus
+from stagedoor.settings import Settings
 from stagedoor.storage import load_booking
+
+APP = bootstrap(Settings.from_env({}))
+
+
+def book(*args: Any, **kwargs: Any) -> Booking:
+    """Make a booking with everything StageDoor runs with in development."""
+    return place_booking(
+        *args,
+        payment_methods=APP.payment_methods,
+        fulfilment=APP.fulfilment,
+        **kwargs,
+    )
 
 
 def test_total_is_the_sum_of_the_lines(ada: Customer) -> None:
-    booking = place_booking(
+    booking = book(
         ada, [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)], "bank_transfer"
     )
 
@@ -30,14 +45,14 @@ def test_total_is_the_sum_of_the_lines(ada: Customer) -> None:
 
 
 def test_lines_keep_the_price_at_the_time_of_booking(ada: Customer) -> None:
-    booking = place_booking(ada, [("TEE-STAGEDOOR", 3)], "bank_transfer")
+    booking = book(ada, [("TEE-STAGEDOOR", 3)], "bank_transfer")
 
     assert booking.lines[0].unit_price == Decimal("18.00")
     assert booking.lines[0].name == "StageDoor T-Shirt"
 
 
 def test_the_booking_is_saved(ada: Customer) -> None:
-    booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     assert load_booking(booking.id) == booking
 
@@ -45,7 +60,7 @@ def test_the_booking_is_saved(ada: Customer) -> None:
 def test_the_customer_is_sent_a_confirmation(
     ada: Customer, isolated_directories: Path
 ) -> None:
-    booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     confirmation = (
         isolated_directories / "mail" / f"{booking.id}-confirmation.txt"
@@ -56,7 +71,7 @@ def test_the_customer_is_sent_a_confirmation(
 
 def test_an_empty_booking_is_rejected(ada: Customer) -> None:
     with pytest.raises(EmptyBookingError):
-        place_booking(ada, [], "bank_transfer")
+        book(ada, [], "bank_transfer")
 
 
 @pytest.mark.parametrize("quantity", [0, -1])
@@ -64,22 +79,20 @@ def test_a_quantity_below_one_is_rejected(
     ada: Customer, quantity: int
 ) -> None:
     with pytest.raises(InvalidQuantityError):
-        place_booking(ada, [("TEE-STAGEDOOR", quantity)], "bank_transfer")
+        book(ada, [("TEE-STAGEDOOR", quantity)], "bank_transfer")
 
 
 def test_an_unknown_item_is_rejected_and_nothing_is_saved(
     ada: Customer, isolated_directories: Path
 ) -> None:
     with pytest.raises(UnknownItemError):
-        place_booking(
-            ada, [("TEE-STAGEDOOR", 1), ("NOPE-999", 1)], "bank_transfer"
-        )
+        book(ada, [("TEE-STAGEDOOR", 1), ("NOPE-999", 1)], "bank_transfer")
 
     assert not list((isolated_directories / "mail").glob("*"))
 
 
 def test_the_booking_carries_its_totals(ada: Customer) -> None:
-    booking = place_booking(
+    booking = book(
         ada,
         [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)],
         "bank_transfer",
@@ -94,7 +107,7 @@ def test_the_booking_carries_its_totals(ada: Customer) -> None:
 
 def test_an_unknown_discount_code_is_rejected(ada: Customer) -> None:
     with pytest.raises(UnknownDiscountCodeError):
-        place_booking(
+        book(
             ada,
             [("TEE-STAGEDOOR", 1)],
             "bank_transfer",
@@ -103,19 +116,19 @@ def test_an_unknown_discount_code_is_rejected(ada: Customer) -> None:
 
 
 def test_booking_takes_the_places(ada: Customer) -> None:
-    place_booking(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
+    book(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
 
     assert PLACES["GDF0320"] == 0
 
 
 def test_we_cannot_sell_places_we_do_not_have(ada: Customer) -> None:
     with pytest.raises(NotEnoughPlacesError):
-        place_booking(ada, [("GDF0320-ADULT", 3)], "bank_transfer")
+        book(ada, [("GDF0320-ADULT", 3)], "bank_transfer")
 
 
 def test_a_rejected_booking_leaves_the_places_alone(ada: Customer) -> None:
     with pytest.raises(NotEnoughPlacesError):
-        place_booking(
+        book(
             ada, [("MUC0314-ADULT", 5), ("GDF0320-ADULT", 3)], "bank_transfer"
         )
 
@@ -123,9 +136,7 @@ def test_a_rejected_booking_leaves_the_places_alone(ada: Customer) -> None:
 
 
 def test_the_booking_records_its_payment(ada: Customer) -> None:
-    booking = place_booking(
-        ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa"
-    )
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa")
 
     assert booking.payment_method == "card"
     assert booking.payment_reference.startswith("pi_")
@@ -136,7 +147,7 @@ def test_the_booking_records_its_payment(ada: Customer) -> None:
 def test_a_bank_transfer_confirmation_says_how_to_pay(
     ada: Customer, isolated_directories: Path
 ) -> None:
-    booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     confirmation = (
         isolated_directories / "mail" / f"{booking.id}-confirmation.txt"
@@ -146,7 +157,7 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
 
 def test_a_declined_card_says_why_and_books_nothing(ada: Customer) -> None:
     with pytest.raises(PaymentFailedError, match="Your card was declined."):
-        place_booking(ada, [("GDF0320-ADULT", 1)], "card", "pm_card_declined")
+        book(ada, [("GDF0320-ADULT", 1)], "card", "pm_card_declined")
 
     assert PLACES["GDF0320"] == 2
 
@@ -155,22 +166,20 @@ def test_a_declined_paypal_payment_says_why_and_books_nothing(
     ada: Customer, isolated_directories: Path
 ) -> None:
     with pytest.raises(PaymentFailedError, match="PayPal declined"):
-        place_booking(ada, [("GDF0320-ADULT", 1)], "paypal", "payer_declined")
+        book(ada, [("GDF0320-ADULT", 1)], "paypal", "payer_declined")
 
     assert not (isolated_directories / "data").exists()
     assert PLACES["GDF0320"] == 2
 
 
 def test_a_bank_transfer_booking_is_awaiting_payment(ada: Customer) -> None:
-    booking = place_booking(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
     assert booking.payment_status == PaymentStatus.AWAITING_PAYMENT
 
 
 def test_paid_e_tickets_are_held_issued_and_invoiced(ada: Customer) -> None:
-    booking = place_booking(
-        ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa"
-    )
+    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
 
     assert len(booking.hold_references) == 1
     assert fakevenue.SEATS["MUC0314"] == 118
@@ -180,7 +189,7 @@ def test_paid_e_tickets_are_held_issued_and_invoiced(ada: Customer) -> None:
 
 
 def test_posted_tickets_get_a_tracking_number(ada_at_home: Customer) -> None:
-    booking = place_booking(
+    booking = book(
         ada_at_home,
         [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)],
         "card",
@@ -197,7 +206,7 @@ def test_a_failed_label_gives_the_seats_back(ada_at_home: Customer) -> None:
     nowhere = Address("1 Nowhere Lane", "Nowhere", "XX1 1XX", "GB")
 
     with pytest.raises(FulfilmentError):
-        place_booking(
+        book(
             replace(ada_at_home, address=nowhere),
             [("MUC0314-ADULT", 2)],
             "card",
@@ -211,15 +220,13 @@ def test_a_failed_label_gives_the_seats_back(ada_at_home: Customer) -> None:
 
 def test_posted_tickets_need_an_address(ada: Customer) -> None:
     with pytest.raises(MissingAddressError):
-        place_booking(
-            ada, [("MUC0314-ADULT", 1)], "bank_transfer", delivery="post"
-        )
+        book(ada, [("MUC0314-ADULT", 1)], "bank_transfer", delivery="post")
 
 
 def test_a_bank_transfer_is_not_issued_until_it_is_paid(
     ada: Customer,
 ) -> None:
-    booking = place_booking(ada, [("MUC0314-ADULT", 2)], "bank_transfer")
+    booking = book(ada, [("MUC0314-ADULT", 2)], "bank_transfer")
 
     assert booking.hold_references == ()
     assert booking.invoice_number is None

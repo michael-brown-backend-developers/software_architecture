@@ -3,12 +3,8 @@
 One call does everything that has to happen once a booking is paid for:
 hold the seats at the venue, get the tickets to the customer, and invoice
 the booking. If the tickets cannot be issued, the seats are given back.
-
-Production's keys come from environment variables. Everywhere else uses
-test keys.
 """
 
-import os
 from dataclasses import dataclass
 
 from stagedoor.exceptions import FulfilmentError
@@ -17,6 +13,7 @@ from stagedoor.fulfilment.venue import VenueHolds
 from stagedoor.fulfilment.wallet import WalletPasses
 from stagedoor.invoicing import create_invoice
 from stagedoor.models import Booking
+from stagedoor.settings import Settings
 
 
 @dataclass(frozen=True)
@@ -63,18 +60,10 @@ class Fulfilment:
         )
 
 
-# Only production uses the real keys, and it must be given them.
-LIVE = os.environ.get("STAGEDOOR_ENV") == "production"
-
-FULFILMENT = Fulfilment(
-    venue=VenueHolds(
-        os.environ["VENUE_URL"] if LIVE else "https://boxoffice.example",
-        os.environ["VENUE_API_KEY"] if LIVE else "venue-test-key",
-    ),
-    wallet=WalletPasses(
-        os.environ["WALLET_API_KEY"] if LIVE else "wallet-test-key"
-    ),
-    royal_mail=RoyalMailShipping(
-        os.environ["ROYAL_MAIL_API_KEY"] if LIVE else "rm-test-key"
-    ),
-)
+def create_fulfilment(settings: Settings) -> Fulfilment:
+    """Build the facade, and every adapter behind it, from the settings."""
+    return Fulfilment(
+        venue=VenueHolds(settings.venue_url, settings.venue_api_key),
+        wallet=WalletPasses(settings.wallet_api_key),
+        royal_mail=RoyalMailShipping(settings.royal_mail_api_key),
+    )

@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from stagedoor.models import Booking
-from stagedoor.payments import get_payment_method
+from stagedoor.payments.base import PaymentMethod
 
 
 def _mail_dir() -> Path:
@@ -19,7 +19,7 @@ def _mail_dir() -> Path:
     return directory
 
 
-def send_confirmation(booking: Booking) -> None:
+def send_confirmation(booking: Booking, payment_method: PaymentMethod) -> None:
     """Send the customer a confirmation of their booking."""
     lines = "\n".join(
         f"  {line.quantity} x {line.name} @ £{line.unit_price}"
@@ -32,7 +32,7 @@ def send_confirmation(booking: Booking) -> None:
             f"Discount ({booking.discount_code}): -£{booking.discount}\n"
         )
 
-    payment = get_payment_method(booking.payment_method).describe(booking)
+    payment = payment_method.describe(booking)
 
     body = (
         f"To: {booking.customer.email}\n"
