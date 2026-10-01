@@ -6,7 +6,8 @@ venue's, not ours: a hold comes back as a dictionary with camelCase keys,
 and a refusal is an exception carrying an HTTP-style status code.
 
     SEATS            the venue's own count of seats left, by performance
-    simulate_outage  set it to True, and every call raises VenueAPIError(503)
+    simulate_outage  set it to True, and every call raises VenueAPIError(503);
+                     set it to a number, and only that many calls fail
 """
 
 from uuid import uuid4
@@ -18,9 +19,20 @@ SEATS: dict[str, int] = {
     "MUC0315": 80,
     "GDF0320": 2,
 }
-simulate_outage: bool = False
+simulate_outage: bool | int = False
 
 _holds: dict[str, tuple[str, int]] = {}
+
+
+def _outage() -> bool:
+    """Whether this call should fail. A number counts down to recovery."""
+    global simulate_outage
+    if simulate_outage is True:
+        return True
+    if simulate_outage:
+        simulate_outage -= 1
+        return True
+    return False
 
 
 class VenueAPIError(Exception):
@@ -40,7 +52,7 @@ class VenueClient:
         self.api_key = api_key
 
     def _connect(self) -> None:
-        if simulate_outage:
+        if _outage():
             raise VenueAPIError(503, "Service Unavailable")
 
     def create_hold(self, performance_code: str, seats: int) -> dict[str, str]:

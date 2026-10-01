@@ -12,7 +12,8 @@ Some payment methods behave differently, so that failures can be tested:
     pm_card_insufficient_funds  raises error.CardError
 
 Set ``simulate_outage`` to True and every call raises
-error.APIConnectionError, as if Stripe could not be reached.
+error.APIConnectionError, as if Stripe could not be reached. Set it to a
+number instead, and only that many calls fail before Stripe recovers.
 """
 
 from dataclasses import dataclass
@@ -23,7 +24,7 @@ from fakestripe import error
 __all__ = ["PaymentIntent", "Refund", "api_key", "error", "simulate_outage"]
 
 api_key: str | None = None
-simulate_outage: bool = False
+simulate_outage: bool | int = False
 
 _DECLINES = {
     "pm_card_declined": ("Your card was declined.", "card_declined"),
@@ -36,8 +37,19 @@ _DECLINES = {
 _by_idempotency_key: dict[str, PaymentIntent] = {}
 
 
-def _connect() -> None:
+def _outage() -> bool:
+    """Whether this call should fail. A number counts down to recovery."""
+    global simulate_outage
+    if simulate_outage is True:
+        return True
     if simulate_outage:
+        simulate_outage -= 1
+        return True
+    return False
+
+
+def _connect() -> None:
+    if _outage():
         raise error.APIConnectionError("Could not connect to Stripe.")
     if not api_key:
         raise error.AuthenticationError("No API key provided.")

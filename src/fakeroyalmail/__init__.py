@@ -4,7 +4,8 @@ Weights are whole grams, the service is one of Royal Mail's own codes, and
 the answer is a tracking number. A failure raises RoyalMailError.
 
     XX1 1XX          a postcode Royal Mail cannot deliver to
-    simulate_outage  set it to True, and every call raises RoyalMailError
+    simulate_outage  set it to True, and every call raises RoyalMailError;
+                     set it to a number, and only that many calls fail
 """
 
 from random import randint
@@ -12,7 +13,18 @@ from random import randint
 __all__ = ["RoyalMailClient", "RoyalMailError", "simulate_outage"]
 
 SERVICES = {"TPN48", "INT-EU", "INT-ROW"}
-simulate_outage: bool = False
+simulate_outage: bool | int = False
+
+
+def _outage() -> bool:
+    """Whether this call should fail. A number counts down to recovery."""
+    global simulate_outage
+    if simulate_outage is True:
+        return True
+    if simulate_outage:
+        simulate_outage -= 1
+        return True
+    return False
 
 
 class RoyalMailError(Exception):
@@ -29,7 +41,7 @@ class RoyalMailClient:
         self, *, weight_grams: int, postcode: str, country: str, service: str
     ) -> str:
         """Book a shipment, and return its tracking number."""
-        if simulate_outage:
+        if _outage():
             raise RoyalMailError("Royal Mail is not responding.")
         if service not in SERVICES:
             raise RoyalMailError(f"Unknown service {service!r}")
