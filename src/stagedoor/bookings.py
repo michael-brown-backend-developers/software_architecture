@@ -9,7 +9,6 @@ from stagedoor.capacity import check_places, give_back_places, take_places
 from stagedoor.catalogue import get_item
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
-    BookingStatusError,
     EmptyBookingError,
     InvalidQuantityError,
     MissingAddressError,
@@ -108,9 +107,7 @@ def place_booking(
 def mark_paid(booking_id: str, *, fulfilment: Fulfilment) -> Booking:
     """The customer's bank transfer has arrived: issue their tickets."""
     booking = load_booking(booking_id)
-    if booking.status != BookingStatus.AWAITING_PAYMENT:
-        raise BookingStatusError(booking.id, "is not waiting to be paid")
-    booking.status = BookingStatus.PAID
+    booking.mark_paid()
     _issue_tickets(booking, fulfilment)
     save_booking(booking)
     return booking
@@ -119,11 +116,7 @@ def mark_paid(booking_id: str, *, fulfilment: Fulfilment) -> Booking:
 def check_in(booking_id: str) -> Booking:
     """The customer is at the door: let them in."""
     booking = load_booking(booking_id)
-    if booking.status == BookingStatus.CHECKED_IN:
-        raise BookingStatusError(booking.id, "has already been checked in")
-    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REFUNDED):
-        raise BookingStatusError(booking.id, "has been cancelled")
-    booking.status = BookingStatus.CHECKED_IN
+    booking.check_in()
     save_booking(booking)
     return booking
 
@@ -136,17 +129,12 @@ def cancel_booking(
 ) -> Booking:
     """Call a booking off. If it has been paid for, give the money back."""
     booking = load_booking(booking_id)
-    if booking.status == BookingStatus.CHECKED_IN:
-        raise BookingStatusError(booking.id, "has already been used")
-    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REFUNDED):
-        raise BookingStatusError(booking.id, "has already been cancelled")
-    if booking.status == BookingStatus.PAID:
+    booking.cancel()
+    if booking.status == BookingStatus.REFUNDED:
+        # Seats first: if the venue says no, nothing has been given back.
+        fulfilment.release(booking)
         method = get_payment_method(booking.payment_method, payment_methods)
         method.refund(booking.payment_reference, booking.total)
-        fulfilment.release(booking)
-        booking.status = BookingStatus.REFUNDED
-    else:
-        booking.status = BookingStatus.CANCELLED
     give_back_places(booking.lines)
     save_booking(booking)
     return booking

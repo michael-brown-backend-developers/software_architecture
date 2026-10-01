@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import ClassVar
+
+from stagedoor.exceptions import IllegalTransitionError
 
 
 class ItemKind(StrEnum):
@@ -110,3 +113,87 @@ class Booking:
     wallet_pass: str | None = None
     tracking_number: str | None = None
     invoice_number: str | None = None
+
+    @property
+    def state(self) -> BookingState:
+        """What this booking can do, in the status it is in."""
+        return STATES[self.status]
+
+    def mark_paid(self) -> None:
+        """The customer's money has arrived."""
+        self.state.mark_paid(self)
+
+    def check_in(self) -> None:
+        """The customer is at the door."""
+        self.state.check_in(self)
+
+    def cancel(self) -> None:
+        """Call the booking off. A paid booking is refunded."""
+        self.state.cancel(self)
+
+
+class BookingState:
+    """What a booking can do in one status.
+
+    Each status has a state, which decides what each action does to a
+    booking in that status. Unless a state says otherwise, it refuses.
+    """
+
+    status: ClassVar[BookingStatus]
+
+    def mark_paid(self, booking: Booking) -> None:
+        self._refuse(booking, BookingStatus.PAID)
+
+    def check_in(self, booking: Booking) -> None:
+        self._refuse(booking, BookingStatus.CHECKED_IN)
+
+    def cancel(self, booking: Booking) -> None:
+        self._refuse(booking, BookingStatus.CANCELLED)
+
+    def _refuse(self, booking: Booking, wanted: BookingStatus) -> None:
+        raise IllegalTransitionError(booking.id, self.status, wanted)
+
+
+class AwaitingPayment(BookingState):
+    status = BookingStatus.AWAITING_PAYMENT
+
+    def mark_paid(self, booking: Booking) -> None:
+        booking.status = BookingStatus.PAID
+
+    def cancel(self, booking: Booking) -> None:
+        booking.status = BookingStatus.CANCELLED
+
+
+class Paid(BookingState):
+    status = BookingStatus.PAID
+
+    def check_in(self, booking: Booking) -> None:
+        booking.status = BookingStatus.CHECKED_IN
+
+    def cancel(self, booking: Booking) -> None:
+        booking.status = BookingStatus.REFUNDED
+
+
+class CheckedIn(BookingState):
+    status = BookingStatus.CHECKED_IN
+
+
+class Cancelled(BookingState):
+    status = BookingStatus.CANCELLED
+
+
+class Refunded(BookingState):
+    status = BookingStatus.REFUNDED
+
+
+# The state for each status. A booking stores its status, not its state.
+STATES: dict[BookingStatus, BookingState] = {
+    state.status: state
+    for state in [
+        AwaitingPayment(),
+        Paid(),
+        CheckedIn(),
+        Cancelled(),
+        Refunded(),
+    ]
+}
