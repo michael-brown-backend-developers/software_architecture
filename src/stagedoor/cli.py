@@ -100,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                 delivery=args.delivery,
                 payment_methods=app.payment_methods,
                 fulfilment=app.fulfilment,
+                bus=app.bus,
             )
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 

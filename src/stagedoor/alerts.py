@@ -5,11 +5,15 @@ comes from the STAGEDOOR_MAIL_DIR environment variable, or ./mail.
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
-from stagedoor.models import Booking
+from stagedoor.events import BookingConfirmed
 
 SALES_TEAM = "sales@stagedoor.example"
+
+# The sales team like to ring anybody who spends more than this.
+BIG_BOOKING = Decimal("500.00")
 
 
 def _mail_dir() -> Path:
@@ -18,14 +22,16 @@ def _mail_dir() -> Path:
     return directory
 
 
-def notify_sales_team(booking: Booking) -> None:
-    """Send the sales team the details of a booking, so they can call."""
+def notify_sales_team(event: BookingConfirmed) -> None:
+    """Tell the sales team about a big booking, so they can call."""
+    if event.total <= BIG_BOOKING:
+        return
     body = (
         f"To: {SALES_TEAM}\n"
-        f"Subject: Big booking {booking.id}\n"
+        f"Subject: Big booking {event.booking_id}\n"
         f"\n"
-        f"{booking.customer.name} <{booking.customer.email}> has just booked"
-        f" £{booking.total} of tickets and extras. Worth a call.\n"
+        f"{event.customer_email} has just booked £{event.total} of tickets"
+        f" and extras. Worth a call.\n"
     )
-    path = _mail_dir() / f"{booking.id}-sales.txt"
+    path = _mail_dir() / f"{event.booking_id}-sales.txt"
     path.write_text(body, encoding="utf-8")

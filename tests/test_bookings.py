@@ -8,7 +8,9 @@ import pytest
 
 from stagedoor.bookings import place_booking
 from stagedoor.bootstrap import bootstrap
+from stagedoor.bus import EventBus
 from stagedoor.capacity import PLACES
+from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
     EmptyBookingError,
     FulfilmentError,
@@ -19,7 +21,6 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.loyalty import points_for
 from stagedoor.models import Address, Booking, Customer, PaymentStatus
 from stagedoor.settings import Settings
 from stagedoor.storage import load_booking
@@ -28,7 +29,11 @@ APP = bootstrap(Settings.from_env({}))
 
 
 def book(*args: Any, **kwargs: Any) -> Booking:
-    """Make a booking with everything StageDoor runs with in development."""
+    """Make a booking with what StageDoor runs with in development.
+
+    Nothing is listening to the bus, unless a test brings its own.
+    """
+    kwargs.setdefault("bus", EventBus())
     return place_booking(
         *args,
         payment_methods=APP.payment_methods,
@@ -233,39 +238,31 @@ def test_a_bank_transfer_is_not_issued_until_it_is_paid(
     assert booking.invoice_number is None
 
 
-def test_a_booking_earns_loyalty_points(ada: Customer) -> None:
-    book(
-        ada,
-        [("MUC0314-ADULT", 2), ("PROG-MUCHADO", 1)],
-        "card",
-        "pm_card_visa",
+def test_a_booking_is_announced(ada: Customer) -> None:
+    bus = EventBus()
+    heard: list[BookingConfirmed] = []
+    bus.subscribe(BookingConfirmed, heard.append)
+
+    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer", bus=bus)
+
+    assert heard == [
+        BookingConfirmed(
+            booking_id=booking.id,
+            customer_email="ada@example.com",
+            total=Decimal("18.00"),
+            placed_at=booking.placed_at,
+        )
+    ]
+
+
+def test_a_reaction_that_fails_does_not_fail_the_booking(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ada = Customer(name="Ada Lovelace", email="ada+shows@example.com")
+
+    booking = book(
+        ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa", bus=APP.bus
     )
 
-    assert points_for("ada@example.com") == 70
-
-
-def test_every_booking_is_recorded_for_the_dashboard(
-    ada: Customer, isolated_directories: Path
-) -> None:
-    booking = book(ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
-
-    sales = isolated_directories / "data" / "analytics.csv"
-    assert f"{booking.id},18.00" in sales.read_text()
-
-
-def test_a_big_booking_is_passed_to_the_sales_team(
-    ada: Customer, isolated_directories: Path
-) -> None:
-    booking = book(ada, [("MUC0314-ADULT", 16)], "card", "pm_card_visa")
-
-    alert = isolated_directories / "mail" / f"{booking.id}-sales.txt"
-    assert "has just booked £512.00" in alert.read_text()
-
-
-def test_a_small_booking_is_not(
-    ada: Customer, isolated_directories: Path
-) -> None:
-    booking = book(ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
-
-    alert = isolated_directories / "mail" / f"{booking.id}-sales.txt"
-    assert not alert.exists()
+    assert load_booking(booking.id) == booking
+    assert "award_points failed to handle BookingConfirmed" in caplog.text

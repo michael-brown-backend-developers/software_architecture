@@ -8,8 +8,9 @@ variable, or ./data if it is not set.
 import json
 import os
 import re
-from decimal import Decimal
 from pathlib import Path
+
+from stagedoor.events import BookingConfirmed
 
 # What a member's email address looks like, as far as the scheme is
 # concerned.
@@ -22,17 +23,16 @@ def _points_file() -> Path:
     return directory / "loyalty.json"
 
 
-def award_points(email: str, total: Decimal) -> int:
-    """Give a member a point for every whole pound, and return their total."""
-    member = email.lower()
+def award_points(event: BookingConfirmed) -> None:
+    """Give the member a point for every whole pound they have spent."""
+    member = event.customer_email.lower()
     if not MEMBER.fullmatch(member):
-        raise ValueError(f"{email!r} is not a member's email address")
+        raise ValueError(f"{member!r} is not a member's email address")
 
     path = _points_file()
     points = json.loads(path.read_text()) if path.exists() else {}
-    points[member] = points.get(member, 0) + int(total)
+    points[member] = points.get(member, 0) + int(event.total)
     path.write_text(json.dumps(points, indent=2))
-    return int(points[member])
 
 
 def points_for(email: str) -> int:

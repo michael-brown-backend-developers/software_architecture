@@ -8,7 +8,7 @@ import csv
 import os
 from pathlib import Path
 
-from stagedoor.models import Booking
+from stagedoor.events import BookingConfirmed
 
 COLUMNS = ["placed_at", "booking_id", "total"]
 
@@ -19,7 +19,7 @@ def _sales_file() -> Path:
     return directory / "analytics.csv"
 
 
-def record_sale(booking: Booking) -> None:
+def record_sale(event: BookingConfirmed) -> None:
     """Add a booking to the sales file."""
     path = _sales_file()
     new_file = not path.exists()
@@ -28,5 +28,5 @@ def record_sale(booking: Booking) -> None:
         if new_file:
             writer.writerow(COLUMNS)
         writer.writerow(
-            [booking.placed_at.isoformat(), booking.id, booking.total]
+            [event.placed_at.isoformat(), event.booking_id, event.total]
         )
