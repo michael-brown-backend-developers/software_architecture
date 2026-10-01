@@ -5,9 +5,14 @@ keeps a record of what was asked of it, so a test can check what happened
 rather than how.
 """
 
+from dataclasses import replace
 from decimal import Decimal
 
-from stagedoor.exceptions import MissingPaymentTokenError, PaymentFailedError
+from stagedoor.exceptions import (
+    BookingNotFoundError,
+    MissingPaymentTokenError,
+    PaymentFailedError,
+)
 from stagedoor.models import Booking, PaymentStatus
 from stagedoor.payments.base import PaymentResult
 
@@ -41,6 +46,36 @@ class FakePaymentMethod:
 
     def describe(self, booking: Booking) -> str:
         return "Paid with a fake."
+
+
+class InMemoryBookingRepository:
+    """Bookings, kept in a dictionary for as long as the test runs.
+
+    It hands out copies, as a database would, so a test cannot change a
+    booking without saving it.
+    """
+
+    def __init__(self) -> None:
+        self.bookings: dict[str, Booking] = {}
+
+    def add(self, booking: Booking) -> None:
+        self.bookings[booking.id] = replace(booking)
+
+    def get(self, booking_id: str) -> Booking:
+        try:
+            return replace(self.bookings[booking_id])
+        except KeyError:
+            raise BookingNotFoundError(booking_id) from None
+
+    def save(self, booking: Booking) -> None:
+        self.bookings[booking.id] = replace(booking)
+
+
+class FailingRepository(InMemoryBookingRepository):
+    """A repository whose database has run out of room."""
+
+    def add(self, booking: Booking) -> None:
+        raise OSError("No space left on device")
 
 
 def no_sleep(seconds: float) -> None:

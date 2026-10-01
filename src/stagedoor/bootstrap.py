@@ -15,7 +15,7 @@ from stagedoor.alerts import notify_sales_team
 from stagedoor.analytics import record_sale
 from stagedoor.bookings import BookingService
 from stagedoor.bus import EventBus
-from stagedoor.db import connect
+from stagedoor.db import SqlAlchemyBookingRepository, connect
 from stagedoor.events import BookingConfirmed
 from stagedoor.fulfilment import create_fulfilment
 from stagedoor.loyalty import award_points
@@ -55,7 +55,9 @@ def bootstrap(
         bookings=BookingService(
             payment_methods=payment_methods,
             fulfilment=create_fulfilment(settings, sleep),
-            sessions=connect(settings.database_url),
+            bookings=SqlAlchemyBookingRepository(
+                connect(settings.database_url)
+            ),
             mailer=Mailer(settings.mail_dir),
             bus=bus,
             clock=now,

@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import fakeroyalmail
@@ -7,7 +8,7 @@ import fakestripe
 import fakevenue
 import fakewallet
 import pytest
-from fakes import no_sleep
+from fakes import InMemoryBookingRepository, no_sleep
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
@@ -57,13 +58,12 @@ def database(test_database: str) -> str:
 
 
 @pytest.fixture
-def settings(isolated_directories: Path, database: str) -> Settings:
-    """Development settings, with the test's own directories and database."""
+def settings(isolated_directories: Path) -> Settings:
+    """Development settings, with the test's own data and mail directories."""
     return Settings.from_env(
         {
             "STAGEDOOR_DATA_DIR": str(isolated_directories / "data"),
             "STAGEDOOR_MAIL_DIR": str(isolated_directories / "mail"),
-            "STAGEDOOR_DATABASE_URL": database,
         }
     )
 
@@ -76,7 +76,8 @@ def app(settings: Settings) -> App:
 
 @pytest.fixture
 def service(app: App) -> BookingService:
-    return app.bookings
+    """The booking service, keeping its bookings in memory."""
+    return replace(app.bookings, bookings=InMemoryBookingRepository())
 
 
 @pytest.fixture(autouse=True)

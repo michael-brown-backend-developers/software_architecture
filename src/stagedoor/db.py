@@ -1,7 +1,10 @@
-"""StageDoor's tables in PostgreSQL, described for SQLAlchemy.
+"""Keeping bookings in PostgreSQL, with SQLAlchemy.
 
-Each class is a table, and each attribute a column. A booking is one row in
-bookings, and one row in booking_lines for each thing on it.
+This is the only module in StageDoor that knows SQLAlchemy exists. Each
+Row class is a table, and each attribute a column: a booking is one row in
+bookings, and one row in booking_lines for each thing on it. The
+repository turns bookings into rows and back, so nothing outside this
+module ever sees a row.
 """
 
 from datetime import datetime
@@ -16,6 +19,16 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
     sessionmaker,
+)
+
+from stagedoor.exceptions import BookingNotFoundError
+from stagedoor.models import (
+    Address,
+    Booking,
+    BookingLine,
+    BookingStatus,
+    Customer,
+    ItemKind,
 )
 
 Money = Numeric(10, 2)
@@ -69,6 +82,27 @@ class BookingLineRow(Base):
     quantity: Mapped[int]
 
 
+class SqlAlchemyBookingRepository:
+    """Bookings, kept in PostgreSQL."""
+
+    def __init__(self, sessions: sessionmaker[Session]) -> None:
+        self.sessions = sessions
+
+    def add(self, booking: Booking) -> None:
+        with self.sessions() as session:
+            session.add(_to_row(booking))
+            session.commit()
+
+    def get(self, booking_id: str) -> Booking:
+        with self.sessions() as session:
+            return _to_booking(_load_row(session, booking_id))
+
+    def save(self, booking: Booking) -> None:
+        with self.sessions() as session:
+            _update_row(_load_row(session, booking.id), booking)
+            session.commit()
+
+
 def connect(url: str) -> sessionmaker[Session]:
     """Sessions with the database at ``url``. Nothing connects until used."""
     return sessionmaker(_create_engine(url), expire_on_commit=False)
@@ -77,3 +111,103 @@ def connect(url: str) -> sessionmaker[Session]:
 def create_tables(url: str) -> None:
     """Create any of StageDoor's tables that do not exist yet."""
     Base.metadata.create_all(_create_engine(url))
+
+
+def _load_row(session: Session, booking_id: str) -> BookingRow:
+    row = session.get(BookingRow, booking_id)
+    if row is None:
+        raise BookingNotFoundError(booking_id)
+    return row
+
+
+def _to_row(booking: Booking) -> BookingRow:
+    address = booking.customer.address
+    return BookingRow(
+        id=booking.id,
+        customer_name=booking.customer.name,
+        customer_email=booking.customer.email,
+        address_line1=address.line1 if address else None,
+        address_city=address.city if address else None,
+        address_postcode=address.postcode if address else None,
+        address_country=address.country if address else None,
+        discount_code=booking.discount_code,
+        subtotal=booking.subtotal,
+        discount=booking.discount,
+        delivery=booking.delivery,
+        delivery_fee=booking.delivery_fee,
+        total=booking.total,
+        vat=booking.vat,
+        payment_method=booking.payment_method,
+        payment_reference=booking.payment_reference,
+        status=booking.status.value,
+        payment_fee=booking.payment_fee,
+        placed_at=booking.placed_at,
+        hold_references=list(booking.hold_references),
+        wallet_pass=booking.wallet_pass,
+        tracking_number=booking.tracking_number,
+        invoice_number=booking.invoice_number,
+        lines=[
+            BookingLineRow(
+                code=line.code,
+                name=line.name,
+                kind=line.kind.value,
+                performance=line.performance,
+                unit_price=line.unit_price,
+                quantity=line.quantity,
+            )
+            for line in booking.lines
+        ],
+    )
+
+
+def _to_booking(row: BookingRow) -> Booking:
+    address = None
+    if row.address_line1 is not None:
+        address = Address(
+            line1=row.address_line1,
+            city=row.address_city or "",
+            postcode=row.address_postcode or "",
+            country=row.address_country or "",
+        )
+    return Booking(
+        id=row.id,
+        customer=Customer(
+            name=row.customer_name, email=row.customer_email, address=address
+        ),
+        lines=tuple(
+            BookingLine(
+                code=line.code,
+                name=line.name,
+                kind=ItemKind(line.kind),
+                performance=line.performance,
+                unit_price=line.unit_price,
+                quantity=line.quantity,
+            )
+            for line in row.lines
+        ),
+        discount_code=row.discount_code,
+        subtotal=row.subtotal,
+        discount=row.discount,
+        delivery=row.delivery,
+        delivery_fee=row.delivery_fee,
+        total=row.total,
+        vat=row.vat,
+        payment_method=row.payment_method,
+        payment_reference=row.payment_reference,
+        status=BookingStatus(row.status),
+        payment_fee=row.payment_fee,
+        placed_at=row.placed_at,
+        hold_references=tuple(row.hold_references),
+        wallet_pass=row.wallet_pass,
+        tracking_number=row.tracking_number,
+        invoice_number=row.invoice_number,
+    )
+
+
+def _update_row(row: BookingRow, booking: Booking) -> None:
+    # Only these change once a booking has been made.
+    row.status = booking.status.value
+    row.hold_references = list(booking.hold_references)
+    row.wallet_pass = booking.wallet_pass
+    row.tracking_number = booking.tracking_number
+    row.invoice_number = booking.invoice_number
