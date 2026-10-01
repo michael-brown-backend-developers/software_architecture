@@ -4,8 +4,8 @@ One call does everything that has to happen once a booking is paid for:
 hold the seats at the venue, get the tickets to the customer, and invoice
 the booking. If the tickets cannot be issued, the seats are given back.
 
-The keys come from environment variables, with test keys to fall back on
-while we develop.
+Production's keys come from environment variables. Everywhere else uses
+test keys.
 """
 
 import os
@@ -63,13 +63,18 @@ class Fulfilment:
         )
 
 
+# Only production uses the real keys, and it must be given them.
+LIVE = os.environ.get("STAGEDOOR_ENV") == "production"
+
 FULFILMENT = Fulfilment(
     venue=VenueHolds(
-        os.environ.get("VENUE_URL", "https://boxoffice.example"),
-        os.environ.get("VENUE_API_KEY", "venue-test-key"),
+        os.environ["VENUE_URL"] if LIVE else "https://boxoffice.example",
+        os.environ["VENUE_API_KEY"] if LIVE else "venue-test-key",
     ),
-    wallet=WalletPasses(os.environ.get("WALLET_API_KEY", "wallet-test-key")),
+    wallet=WalletPasses(
+        os.environ["WALLET_API_KEY"] if LIVE else "wallet-test-key"
+    ),
     royal_mail=RoyalMailShipping(
-        os.environ.get("ROYAL_MAIL_API_KEY", "rm-test-key")
+        os.environ["ROYAL_MAIL_API_KEY"] if LIVE else "rm-test-key"
     ),
 )

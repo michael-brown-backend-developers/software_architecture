@@ -6,8 +6,8 @@ customer, without knowing which way the customer chose to pay - or which
 company takes the money. Each company's library is used in exactly one
 module: the adapter that translates it.
 
-The API keys come from environment variables, with test keys to fall back
-on while we develop.
+Which ways of paying are switched on, and production's keys, come from
+environment variables. Everywhere else uses test keys.
 """
 
 import os
@@ -22,24 +22,41 @@ from stagedoor.payments.wrappers import (
     RetryingPaymentMethod,
 )
 
-PAYMENT_METHODS: dict[str, PaymentMethod] = {
-    "card": LoggingPaymentMethod(
+# Only production uses the real keys, and it must be given them. Everywhere
+# else uses test keys, whatever is set, so staging can never charge a card.
+LIVE = os.environ.get("STAGEDOOR_ENV") == "production"
+
+# Which ways of paying are switched on, for example "card,bank_transfer".
+ENABLED = os.environ.get(
+    "STAGEDOOR_PAYMENT_METHODS", "card,paypal,bank_transfer"
+).split(",")
+
+PAYMENT_METHODS: dict[str, PaymentMethod] = {}
+if "card" in ENABLED:
+    PAYMENT_METHODS["card"] = LoggingPaymentMethod(
         RetryingPaymentMethod(
             StripeCardPayment(
-                api_key=os.environ.get("STRIPE_API_KEY", "sk_test_stagedoor"),
+                api_key=(
+                    os.environ["STRIPE_API_KEY"]
+                    if LIVE
+                    else "sk_test_stagedoor"
+                ),
             ),
         ),
         "Stripe charge",
-    ),
-    "paypal": LoggingPaymentMethod(
+    )
+if "paypal" in ENABLED:
+    PAYMENT_METHODS["paypal"] = LoggingPaymentMethod(
         PayPalPayment(
-            client_id=os.environ.get("PAYPAL_CLIENT_ID", "stagedoor-sandbox"),
-            secret=os.environ.get("PAYPAL_SECRET", "sandbox-secret"),
+            client_id=(
+                os.environ["PAYPAL_CLIENT_ID"] if LIVE else "stagedoor-sandbox"
+            ),
+            secret=os.environ["PAYPAL_SECRET"] if LIVE else "sandbox-secret",
         ),
         "PayPal charge",
-    ),
-    "bank_transfer": BankTransferPayment(),
-}
+    )
+if "bank_transfer" in ENABLED:
+    PAYMENT_METHODS["bank_transfer"] = BankTransferPayment()
 
 
 def get_payment_method(name: str) -> PaymentMethod:
