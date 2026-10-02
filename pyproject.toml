@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "A small box office, built to be changed."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = ["sqlalchemy (>=2.0,<3.0)", "psycopg[binary] (>=3.2,<4.0)"]
+dependencies = [
+    "sqlalchemy (>=2.0,<3.0)",
+    "psycopg[binary] (>=3.2,<4.0)",
+    "fastapi[standard] (>=0.120,<1.0)",
+]
 
 [project.scripts]
 stagedoor = "stagedoor.cli:main"
@@ -52,5 +56,6 @@ known-third-party = [
 dev = [
     "pytest (>=9.1.1,<10.0.0)",
     "mypy (>=2.3.1,<3.0.0)",
-    "ruff (>=0.16.9,<0.17.0)"
+    "ruff (>=0.16.9,<0.17.0)",
+    "httpx2 (>=2.13,<3.0)"
 ]
