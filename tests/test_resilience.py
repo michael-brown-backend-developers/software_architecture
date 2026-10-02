@@ -1,8 +1,6 @@
-import logging
-
 import pytest
 
-from stagedoor.adapters.resilience import retry, timed
+from stagedoor.adapters.resilience import retry
 from stagedoor.domain.exceptions import TransientError
 
 
@@ -37,19 +35,7 @@ def test_retry_leaves_other_errors_alone() -> None:
     assert len(calls) == 1
 
 
-def test_timed_logs_each_call(caplog: pytest.LogCaptureFixture) -> None:
-    @timed("Something slow")
-    def something() -> int:
-        return 42
-
-    with caplog.at_level(logging.INFO):
-        assert something() == 42
-
-    assert caplog.messages[0].startswith("Something slow took ")
-
-
-def test_decorated_functions_keep_their_names() -> None:
-    @timed("Named")
+def test_a_decorated_function_keeps_its_name() -> None:
     @retry()
     def a_function_with_a_name() -> None:
         """Its docstring."""

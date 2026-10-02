@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 import fakeroyalmail
 
-from stagedoor.adapters.resilience import retry, timed
+from stagedoor.adapters.resilience import retry
 from stagedoor.domain.catalogue import get_item
 from stagedoor.domain.delivery import shipping_region
 from stagedoor.domain.exceptions import (
@@ -31,8 +31,8 @@ class RoyalMailShipping:
         self, api_key: str, sleep: Callable[[float], None] = time.sleep
     ) -> None:
         self.client = fakeroyalmail.RoyalMailClient(api_key)
-        self._post = timed("Royal Mail shipment")(
-            retry(attempts=3, base_delay=0.5, sleep=sleep)(self._post_once)
+        self._post = retry(attempts=3, base_delay=0.5, sleep=sleep)(
+            self._post_once
         )
 
     def post(self, booking: Booking) -> str:

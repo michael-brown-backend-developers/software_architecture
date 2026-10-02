@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import partial
 
 import pytest
 
@@ -24,12 +25,7 @@ class DoSomething(Command):
 def test_a_command_goes_to_its_handler() -> None:
     bus = MessageBus()
     done: list[DoSomething] = []
-
-    def do_it(command: DoSomething) -> list[object]:
-        done.append(command)
-        return []
-
-    bus.register(DoSomething, do_it)
+    bus.register(DoSomething, done.append)
 
     bus.handle(DoSomething("a sale"))
 
@@ -37,7 +33,7 @@ def test_a_command_goes_to_its_handler() -> None:
 
 
 def test_a_failing_command_fails_for_its_sender() -> None:
-    def refuse(command: DoSomething) -> list[object]:
+    def refuse(command: DoSomething) -> None:
         raise ValueError("no")
 
     bus = MessageBus()
@@ -47,64 +43,46 @@ def test_a_failing_command_fails_for_its_sender() -> None:
         bus.handle(DoSomething("a sale"))
 
 
-def test_the_events_a_command_returns_are_handled_after_it() -> None:
-    bus = MessageBus()
-    heard: list[SomethingHappened] = []
-    bus.register(
-        DoSomething, lambda command: [SomethingHappened(command.what)]
-    )
-    bus.subscribe(SomethingHappened, heard.append)
-
-    bus.handle(DoSomething("a sale"))
-
-    assert heard == [SomethingHappened("a sale")]
-
-
-def test_every_handler_gets_the_event() -> None:
-    bus = MessageBus()
-    first: list[SomethingHappened] = []
-    second: list[SomethingHappened] = []
-    bus.subscribe(SomethingHappened, first.append)
-    bus.subscribe(SomethingHappened, second.append)
-
-    bus.handle(SomethingHappened("a sale"))
-
-    assert first == second == [SomethingHappened("a sale")]
-
-
-def test_handlers_only_get_the_events_they_subscribed_to() -> None:
-    bus = MessageBus()
-    heard: list[SomethingHappened] = []
-    bus.subscribe(SomethingHappened, heard.append)
-
-    bus.handle(SomethingElseHappened("a refund"))
-
-    assert heard == []
-
-
-def test_a_failing_handler_is_logged_and_the_others_still_run(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    def broken(event: SomethingHappened) -> None:
-        raise ValueError("oops")
-
-    bus = MessageBus()
-    heard: list[SomethingHappened] = []
-    bus.subscribe(SomethingHappened, broken)
-    bus.subscribe(SomethingHappened, heard.append)
-
-    bus.handle(SomethingHappened("a sale"))
-
-    assert heard == [SomethingHappened("a sale")]
-    assert "broken failed to handle SomethingHappened" in caplog.text
-
-
-def test_everything_handled_is_logged_with_its_time(
+def test_every_command_is_logged_with_its_time(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level("INFO")
     bus = MessageBus()
+    bus.register(DoSomething, lambda command: None)
 
-    bus.handle(SomethingHappened("a sale"))
+    bus.handle(DoSomething("a sale"))
 
-    assert "SomethingHappened took" in caplog.text
+    assert "DoSomething took" in caplog.text
+
+
+def tell_the_box_office(event: SomethingHappened) -> None: ...
+
+
+def tell_the_sales_team(event: SomethingHappened) -> None: ...
+
+
+def test_an_event_has_every_handler_subscribed_to_it() -> None:
+    bus = MessageBus()
+    bus.subscribe(SomethingHappened, tell_the_box_office)
+    bus.subscribe(SomethingHappened, tell_the_sales_team)
+
+    assert bus.handlers_for(SomethingHappened("a sale")) == [
+        ("tell_the_box_office", tell_the_box_office),
+        ("tell_the_sales_team", tell_the_sales_team),
+    ]
+
+
+def test_an_event_has_only_the_handlers_subscribed_to_it() -> None:
+    bus = MessageBus()
+    bus.subscribe(SomethingHappened, tell_the_box_office)
+
+    assert bus.handlers_for(SomethingElseHappened("a refund")) == []
+
+
+def test_a_handler_with_arguments_filled_in_keeps_its_name() -> None:
+    bus = MessageBus()
+    bus.subscribe(SomethingHappened, partial(tell_the_box_office))
+
+    [(name, _)] = bus.handlers_for(SomethingHappened("a sale"))
+
+    assert name == "tell_the_box_office"

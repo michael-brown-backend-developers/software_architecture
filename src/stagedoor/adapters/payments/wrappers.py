@@ -1,15 +1,14 @@
-"""Payment methods that add something to another payment method.
+"""A payment method that adds something to another payment method.
 
-Each wrapper is a PaymentMethod that holds another PaymentMethod, passes
-every call on to it, and adds one thing of its own. Because they all have
-the same shape, they can be wrapped around each other, in any order.
+The wrapper is a PaymentMethod that holds another PaymentMethod, passes
+every call on to it, and adds one thing of its own: trying a charge again.
 """
 
 import time
 from collections.abc import Callable
 from decimal import Decimal
 
-from stagedoor.adapters.resilience import retry, timed
+from stagedoor.adapters.resilience import retry
 from stagedoor.application.ports import PaymentMethod, PaymentResult
 from stagedoor.domain.models import Booking
 
@@ -26,28 +25,6 @@ class RetryingPaymentMethod:
     ) -> None:
         self.inner = inner
         self._charge = retry(attempts, base_delay, sleep)(inner.charge)
-
-    def charge(
-        self, amount: Decimal, booking_id: str, token: str | None
-    ) -> PaymentResult:
-        return self._charge(amount, booking_id, token)
-
-    def refund(self, reference: str, amount: Decimal) -> None:
-        self.inner.refund(reference, amount)
-
-    def fee(self, amount: Decimal) -> Decimal:
-        return self.inner.fee(amount)
-
-    def describe(self, booking: Booking) -> str:
-        return self.inner.describe(booking)
-
-
-class LoggingPaymentMethod:
-    """Logs how long every charge takes."""
-
-    def __init__(self, inner: PaymentMethod, name: str) -> None:
-        self.inner = inner
-        self._charge = timed(name)(inner.charge)
 
     def charge(
         self, amount: Decimal, booking_id: str, token: str | None

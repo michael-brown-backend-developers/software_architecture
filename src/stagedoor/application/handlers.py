@@ -3,8 +3,7 @@
 One function for each command. Each is handed the command, and then,
 by keyword, only what it needs to carry it out - which bootstrap.py fills
 in once, so the bus only ever passes the command. A command's handler
-puts the events that must be handled later in the outbox; it returns any
-that must be handled now, for the bus to pass on.
+puts the events that follow from it in the outbox.
 
 The events' handlers that belong to booking are here too.
 """
@@ -49,7 +48,7 @@ def make_booking(
     fulfilment: Fulfilment,
     unit_of_work: Callable[[], UnitOfWork],
     clock: Callable[[], datetime],
-) -> list[object]:
+) -> None:
     if not command.items:
         raise EmptyBookingError()
     if command.delivery == "post" and command.customer.address is None:
@@ -107,7 +106,6 @@ def make_booking(
             )
         )
         uow.commit()
-    return []
 
 
 def mark_paid(
@@ -115,25 +113,23 @@ def mark_paid(
     *,
     fulfilment: Fulfilment,
     unit_of_work: Callable[[], UnitOfWork],
-) -> list[object]:
+) -> None:
     with unit_of_work() as uow:
         booking = uow.bookings.get(command.booking_id)
         booking.mark_paid()
         _issue_tickets(booking, fulfilment)
         uow.bookings.save(booking)
         uow.commit()
-    return []
 
 
 def check_in(
     command: CheckIn, *, unit_of_work: Callable[[], UnitOfWork]
-) -> list[object]:
+) -> None:
     with unit_of_work() as uow:
         booking = uow.bookings.get(command.booking_id)
         booking.check_in()
         uow.bookings.save(booking)
         uow.commit()
-    return []
 
 
 def cancel_booking(
@@ -142,7 +138,7 @@ def cancel_booking(
     payment_methods: Mapping[str, PaymentMethod],
     fulfilment: Fulfilment,
     unit_of_work: Callable[[], UnitOfWork],
-) -> list[object]:
+) -> None:
     with unit_of_work() as uow:
         booking = uow.bookings.get(command.booking_id)
         booking.cancel()
@@ -156,7 +152,6 @@ def cancel_booking(
         uow.places.give_back(booking.lines)
         uow.bookings.save(booking)
         uow.commit()
-    return []
 
 
 def send_confirmation(

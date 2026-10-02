@@ -22,7 +22,7 @@ from pathlib import Path
 
 from sqlalchemy import update
 
-from stagedoor.adapters.payments import create_payment_method
+from stagedoor.adapters.payments.bank_transfer import BankTransferPayment
 from stagedoor.adapters.postgres import PerformanceRow, connect, create_tables
 from stagedoor.application.commands import MakeBooking
 from stagedoor.application.ports import PaymentMethod, PaymentResult
@@ -57,7 +57,7 @@ class SlowPayment:
 def terminal(name: str, settings: Settings) -> None:
     mail = Path(tempfile.mkdtemp(prefix=f"stagedoor-{name.lower()}-"))
     settings = replace(settings, mail_dir=mail)
-    slow = SlowPayment(create_payment_method("bank_transfer", settings))
+    slow = SlowPayment(BankTransferPayment())
     app = bootstrap(settings, payment_methods={"bank_transfer": slow})
     command = MakeBooking(
         customer=Customer(name=name, email=f"{name.lower()}@example.com"),

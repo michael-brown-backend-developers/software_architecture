@@ -11,12 +11,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 
+import fakemailer
+
 from stagedoor.adapters.alerts import notify_sales_team
 from stagedoor.adapters.analytics import record_sale
-from stagedoor.adapters.email import create_mailer
-from stagedoor.adapters.fulfilment import create_fulfilment
+from stagedoor.adapters.email import ProviderMailer
+from stagedoor.adapters.fulfilment import VenueFulfilment
+from stagedoor.adapters.fulfilment.royal_mail import RoyalMailShipping
+from stagedoor.adapters.fulfilment.venue import VenueHolds
+from stagedoor.adapters.fulfilment.wallet import WalletPasses
 from stagedoor.adapters.loyalty import award_points
-from stagedoor.adapters.payments import create_payment_method
+from stagedoor.adapters.payments.bank_transfer import BankTransferPayment
+from stagedoor.adapters.payments.paypal import PayPalPayment
+from stagedoor.adapters.payments.stripe import StripeCardPayment
+from stagedoor.adapters.payments.wrappers import RetryingPaymentMethod
 from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
 from stagedoor.application.bus import MessageBus
 from stagedoor.application.commands import (
@@ -32,7 +40,11 @@ from stagedoor.application.handlers import (
     mark_paid,
     send_confirmation,
 )
-from stagedoor.application.ports import PaymentMethod, UnitOfWork
+from stagedoor.application.ports import (
+    PaymentMethod,
+    UnitOfWork,
+    get_payment_method,
+)
 from stagedoor.domain.events import BookingConfirmed
 from stagedoor.settings import Settings
 
@@ -66,11 +78,27 @@ def bootstrap(
             SqlAlchemyUnitOfWork, connect(settings.database_url)
         )
     if payment_methods is None:
+        every_method: dict[str, PaymentMethod] = {
+            "card": RetryingPaymentMethod(
+                StripeCardPayment(settings.stripe_api_key), sleep=sleep
+            ),
+            "paypal": PayPalPayment(
+                settings.paypal_client_id, settings.paypal_secret
+            ),
+            "bank_transfer": BankTransferPayment(),
+        }
         payment_methods = {
-            name: create_payment_method(name, settings, sleep)
+            name: get_payment_method(name, every_method)
             for name in sorted(settings.payment_methods)
         }
-    fulfilment = create_fulfilment(settings, sleep)
+    fulfilment = VenueFulfilment(
+        venue=VenueHolds(settings.venue_url, settings.venue_api_key, sleep),
+        wallet=WalletPasses(settings.wallet_api_key),
+        royal_mail=RoyalMailShipping(settings.royal_mail_api_key, sleep),
+    )
+    mailer = ProviderMailer(
+        fakemailer.EmailClient(settings.mailer_api_key, settings.mail_dir)
+    )
     clock = clock or now
 
     bus = MessageBus()
@@ -106,7 +134,7 @@ def bootstrap(
             send_confirmation,
             payment_methods=payment_methods,
             unit_of_work=unit_of_work,
-            mailer=create_mailer(settings),
+            mailer=mailer,
         ),
     )
     bus.subscribe(BookingConfirmed, award_points)

@@ -10,7 +10,6 @@ import fakemailer
 from stagedoor.application.ports import PaymentMethod
 from stagedoor.domain.exceptions import EmailUnavailableError
 from stagedoor.domain.models import Booking
-from stagedoor.settings import Settings
 
 
 class ProviderMailer:
@@ -31,13 +30,6 @@ class ProviderMailer:
             )
         except fakemailer.ProviderError as error:
             raise EmailUnavailableError(error.message) from error
-
-
-def create_mailer(settings: Settings) -> ProviderMailer:
-    """The mailer for these settings."""
-    return ProviderMailer(
-        fakemailer.EmailClient(settings.mailer_api_key, settings.mail_dir)
-    )
 
 
 def _confirmation(booking: Booking, payment_method: PaymentMethod) -> str:

@@ -5,9 +5,6 @@ hold the seats at the venue, get the tickets to the customer, and invoice
 the booking. If the tickets cannot be issued, the seats are given back.
 """
 
-import time
-from collections.abc import Callable
-
 from stagedoor.adapters.fulfilment.invoicing import create_invoice
 from stagedoor.adapters.fulfilment.royal_mail import RoyalMailShipping
 from stagedoor.adapters.fulfilment.venue import VenueHolds
@@ -15,7 +12,6 @@ from stagedoor.adapters.fulfilment.wallet import WalletPasses
 from stagedoor.application.ports import FulfilmentResult
 from stagedoor.domain.exceptions import FulfilmentError
 from stagedoor.domain.models import Booking
-from stagedoor.settings import Settings
 
 
 class VenueFulfilment:
@@ -54,17 +50,3 @@ class VenueFulfilment:
     def release(self, booking: Booking) -> None:
         """Give a cancelled booking's seats back to the venue."""
         self.venue.release(booking.hold_references)
-
-
-def create_fulfilment(
-    settings: Settings, sleep: Callable[[float], None] = time.sleep
-) -> VenueFulfilment:
-    """Build the facade, and every adapter behind it, from the settings.
-
-    ``sleep`` is how the adapters wait before they try again.
-    """
-    return VenueFulfilment(
-        venue=VenueHolds(settings.venue_url, settings.venue_api_key, sleep),
-        wallet=WalletPasses(settings.wallet_api_key),
-        royal_mail=RoyalMailShipping(settings.royal_mail_api_key, sleep),
-    )

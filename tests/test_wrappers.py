@@ -1,12 +1,8 @@
-import logging
 from decimal import Decimal
 
 import pytest
 
-from stagedoor.adapters.payments.wrappers import (
-    LoggingPaymentMethod,
-    RetryingPaymentMethod,
-)
+from stagedoor.adapters.payments.wrappers import RetryingPaymentMethod
 from stagedoor.application.ports import PaymentResult
 from stagedoor.domain.exceptions import (
     PaymentFailedError,
@@ -88,22 +84,3 @@ def test_the_waits_get_longer() -> None:
     retrying.charge(AMOUNT, "abc123", None)
 
     assert waits == [0.5, 1.0]
-
-
-def test_logging_records_how_long_a_charge_took(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    logging_method = LoggingPaymentMethod(FlakyPayment(failures=0), "Flaky")
-
-    with caplog.at_level(logging.INFO):
-        logging_method.charge(AMOUNT, "abc123", None)
-
-    assert caplog.messages[0].startswith("Flaky took ")
-
-
-def test_wrappers_pass_everything_else_through() -> None:
-    wrapped = LoggingPaymentMethod(
-        RetryingPaymentMethod(FlakyPayment(failures=0)), "Flaky"
-    )
-
-    assert wrapped.fee(AMOUNT) == Decimal("0.42")

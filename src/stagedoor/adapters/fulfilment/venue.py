@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 import fakevenue
 
-from stagedoor.adapters.resilience import retry, timed
+from stagedoor.adapters.resilience import retry
 from stagedoor.domain.exceptions import (
     FulfilmentError,
     FulfilmentUnavailableError,
@@ -30,8 +30,8 @@ class VenueHolds:
         self.client = fakevenue.VenueClient(base_url, api_key)
         # Wrapped here, where the adapter is built, so that whoever builds
         # it decides how long a retry waits.
-        self._hold = timed("Venue hold")(
-            retry(attempts=2, base_delay=1.0, sleep=sleep)(self._hold_once)
+        self._hold = retry(attempts=2, base_delay=1.0, sleep=sleep)(
+            self._hold_once
         )
 
     def hold(self, booking: Booking) -> tuple[str, ...]:
