@@ -1,30 +1,43 @@
-"""Telling customers what has happened.
+"""Telling customers what has happened, by email.
 
-StageDoor does not send real email yet. Each "email" is a text file in a
-mail directory. Open the file and you can see exactly what the customer
-would have received.
+Email goes through our email provider. Its library is used only here, and
+its errors become StageDoor's. The stand-in provider delivers each message
+as a text file in the mail directory, so you can read what was sent.
 """
 
-from pathlib import Path
+import fakemailer
 
+from stagedoor.exceptions import EmailUnavailableError
 from stagedoor.models import Booking
 from stagedoor.payments.base import PaymentMethod
+from stagedoor.settings import Settings
 
 
 class Mailer:
-    """Sends customers their email, as files in one directory."""
+    """Sends customers their email, through the email provider."""
 
-    def __init__(self, directory: Path) -> None:
-        self.directory = directory
+    def __init__(self, client: fakemailer.EmailClient) -> None:
+        self.client = client
 
     def send_confirmation(
         self, booking: Booking, payment_method: PaymentMethod
     ) -> None:
         """Send the customer a confirmation of their booking."""
-        body = _confirmation(booking, payment_method)
-        self.directory.mkdir(parents=True, exist_ok=True)
-        path = self.directory / f"{booking.id}-confirmation.txt"
-        path.write_text(body, encoding="utf-8")
+        try:
+            self.client.send(
+                to=booking.customer.email,
+                subject=f"Your StageDoor booking {booking.id}",
+                text=_confirmation(booking, payment_method),
+            )
+        except fakemailer.ProviderError as error:
+            raise EmailUnavailableError(error.message) from error
+
+
+def create_mailer(settings: Settings) -> Mailer:
+    """The mailer for these settings."""
+    return Mailer(
+        fakemailer.EmailClient(settings.mailer_api_key, settings.mail_dir)
+    )
 
 
 def _confirmation(booking: Booking, payment_method: PaymentMethod) -> str:
@@ -42,9 +55,6 @@ def _confirmation(booking: Booking, payment_method: PaymentMethod) -> str:
     payment = payment_method.describe(booking)
 
     return (
-        f"To: {booking.customer.email}\n"
-        f"Subject: Your StageDoor booking {booking.id}\n"
-        f"\n"
         f"Hi {booking.customer.name},\n"
         f"\n"
         f"Thanks for booking with us. Here is what you bought:\n"

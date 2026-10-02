@@ -25,7 +25,7 @@ from stagedoor.handlers import (
     mark_paid,
 )
 from stagedoor.loyalty import award_points
-from stagedoor.notifications import Mailer
+from stagedoor.notifications import create_mailer
 from stagedoor.payments import create_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.settings import Settings
@@ -74,7 +74,7 @@ def bootstrap(
             payment_methods=payment_methods,
             fulfilment=fulfilment,
             unit_of_work=unit_of_work,
-            mailer=Mailer(settings.mail_dir),
+            mailer=create_mailer(settings),
             clock=clock or now,
         ),
     )

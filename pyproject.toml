@@ -21,6 +21,7 @@ packages = [
     { include = "fakevenue", from = "src" },
     { include = "fakewallet", from = "src" },
     { include = "fakeroyalmail", from = "src" },
+    { include = "fakemailer", from = "src" },
 ]
 
 [build-system]
@@ -50,6 +51,7 @@ known-third-party = [
     "fakevenue",
     "fakewallet",
     "fakeroyalmail",
+    "fakemailer",
 ]
 
 [dependency-groups]

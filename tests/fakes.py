@@ -8,6 +8,7 @@ rather than how.
 from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 from typing import Self
 
 from stagedoor.capacity import CAPACITY, places_wanted
@@ -133,6 +134,18 @@ class InMemoryUnitOfWork:
         self.bookings.bookings.update(bookings)
         self.places.left.clear()
         self.places.left.update(left)
+
+
+def mail_about(booking_id: str, folder: Path) -> str:
+    """The email about a booking that the stand-in provider delivered.
+
+    Empty if there is none.
+    """
+    for path in sorted(folder.glob("msg_*.txt")):
+        text = path.read_text(encoding="utf-8")
+        if f"Subject: Your StageDoor booking {booking_id}\n" in text:
+            return text
+    return ""
 
 
 def no_sleep(seconds: float) -> None:

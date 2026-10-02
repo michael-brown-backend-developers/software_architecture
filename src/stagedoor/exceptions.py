@@ -125,6 +125,14 @@ class FulfilmentUnavailableError(FulfilmentError, TransientError):
     """Part of issuing the tickets is not answering. Later might work."""
 
 
+class EmailUnavailableError(TransientError):
+    """The email provider could not be reached."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"The email provider is unavailable: {reason}")
+        self.reason = reason
+
+
 class IllegalTransitionError(StageDoorError):
     """A booking cannot get there from where it has got to."""
 

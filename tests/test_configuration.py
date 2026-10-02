@@ -14,6 +14,7 @@ PRODUCTION = {
     "VENUE_API_KEY": "live-venue-key",
     "WALLET_API_KEY": "live-wallet-key",
     "ROYAL_MAIL_API_KEY": "live-rm-key",
+    "MAILER_API_KEY": "live-mailer-key",
 }
 
 

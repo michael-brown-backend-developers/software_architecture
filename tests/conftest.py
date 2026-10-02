@@ -2,6 +2,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import fakemailer
 import fakeroyalmail
 import fakestripe
 import fakevenue
@@ -91,6 +92,7 @@ def reset_fakes() -> Iterator[None]:
     fakevenue.simulate_outage = False
     fakewallet.simulate_outage = False
     fakeroyalmail.simulate_outage = False
+    fakemailer.simulate_outage = False
     fakestripe.simulate_outage = False
     fakestripe._by_idempotency_key.clear()
 

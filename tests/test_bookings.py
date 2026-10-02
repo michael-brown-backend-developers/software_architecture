@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import fakemailer
 import fakestripe
 import fakevenue
 import pytest
@@ -11,6 +12,7 @@ from fakes import (
     FakePaymentMethod,
     InMemoryPlaceRepository,
     InMemoryUnitOfWork,
+    mail_about,
     no_sleep,
 )
 
@@ -19,6 +21,7 @@ from stagedoor.bootstrap import App, bootstrap
 from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
+    EmailUnavailableError,
     EmptyBookingError,
     FulfilmentError,
     IllegalTransitionError,
@@ -83,11 +86,9 @@ def test_the_customer_is_sent_a_confirmation(
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
-    confirmation = (
-        isolated_directories / "mail" / f"{booking.id}-confirmation.txt"
-    )
-    assert "To: ada@example.com" in confirmation.read_text()
-    assert "Total: £18.00 (includes VAT of £3.00)" in confirmation.read_text()
+    confirmation = mail_about(booking.id, isolated_directories / "mail")
+    assert "To: ada@example.com" in confirmation
+    assert "Total: £18.00 (includes VAT of £3.00)" in confirmation
 
 
 def test_an_empty_booking_is_rejected(app: App, ada: Customer) -> None:
@@ -181,10 +182,8 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
 
-    confirmation = (
-        isolated_directories / "mail" / f"{booking.id}-confirmation.txt"
-    )
-    assert f"quoting SD-{booking.id.upper()}" in confirmation.read_text()
+    confirmation = mail_about(booking.id, isolated_directories / "mail")
+    assert f"quoting SD-{booking.id.upper()}" in confirmation
 
 
 def test_a_declined_card_says_why_and_books_nothing(
@@ -436,8 +435,7 @@ def test_a_booking_that_cannot_be_saved_is_not_confirmed(
             )
         )
 
-    mail = isolated_directories / "mail"
-    assert not (mail / "abc123-confirmation.txt").exists()
+    assert mail_about("abc123", isolated_directories / "mail") == ""
 
 
 def test_a_booking_that_cannot_be_saved_is_not_paid_for(
@@ -485,3 +483,16 @@ def test_a_booking_survives_a_busy_moment_at_the_venue(
     booking = book(app, ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
 
     assert len(booking.hold_references) == 1
+
+
+@pytest.mark.xfail(
+    strict=True, raises=EmailUnavailableError, reason="emailed while waiting"
+)
+def test_a_booking_is_made_even_if_the_email_cannot_be_sent(
+    app: App, ada: Customer
+) -> None:
+    fakemailer.simulate_outage = True
+
+    booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "card", "pm_card_visa")
+
+    assert booking.status == BookingStatus.PAID
