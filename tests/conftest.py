@@ -8,13 +8,17 @@ import fakestripe
 import fakevenue
 import fakewallet
 import pytest
-from fakes import InMemoryPlaceRepository, InMemoryUnitOfWork, no_sleep
+from fakes import no_sleep
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
+from stagedoor.adapters.in_memory import (
+    InMemoryPlaceRepository,
+    InMemoryUnitOfWork,
+)
+from stagedoor.adapters.postgres import Base, create_tables
 from stagedoor.bootstrap import App, bootstrap
-from stagedoor.db import Base, create_tables
-from stagedoor.models import Address, Customer
+from stagedoor.domain.models import Address, Customer
 from stagedoor.settings import Settings
 
 

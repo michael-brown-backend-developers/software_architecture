@@ -7,11 +7,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from fakes import InMemoryUnitOfWork
 
-from stagedoor.db import SqlAlchemyUnitOfWork, connect
-from stagedoor.events import BookingConfirmed
-from stagedoor.unit_of_work import UnitOfWork
+from stagedoor.adapters.in_memory import InMemoryUnitOfWork
+from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
+from stagedoor.application.ports import UnitOfWork
+from stagedoor.domain.events import BookingConfirmed
 
 # By then, everything added to an outbox is due.
 LATER = datetime(2100, 1, 1, tzinfo=UTC)

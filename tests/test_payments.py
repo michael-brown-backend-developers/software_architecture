@@ -4,17 +4,22 @@ from decimal import Decimal
 import fakestripe
 import pytest
 
-from stagedoor.exceptions import (
+from stagedoor.adapters.payments.bank_transfer import BankTransferPayment
+from stagedoor.adapters.payments.paypal import PayPalPayment
+from stagedoor.adapters.payments.stripe import StripeCardPayment, to_pence
+from stagedoor.application.ports import get_payment_method
+from stagedoor.domain.exceptions import (
     MissingPaymentTokenError,
     PaymentFailedError,
     PaymentUnavailableError,
     UnknownPaymentMethodError,
 )
-from stagedoor.models import Booking, BookingStatus, Customer, PaymentStatus
-from stagedoor.payments import get_payment_method
-from stagedoor.payments.bank_transfer import BankTransferPayment
-from stagedoor.payments.paypal import PayPalPayment
-from stagedoor.payments.stripe import StripeCardPayment, to_pence
+from stagedoor.domain.models import (
+    Booking,
+    BookingStatus,
+    Customer,
+    PaymentStatus,
+)
 
 AMOUNT = Decimal("63.00")
 

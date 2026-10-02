@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.delivery import delivery_cost, shipping_region
-from stagedoor.exceptions import UnknownDeliveryOptionError
+from stagedoor.domain.delivery import delivery_cost, shipping_region
+from stagedoor.domain.exceptions import UnknownDeliveryOptionError
 
 
 @pytest.mark.parametrize(

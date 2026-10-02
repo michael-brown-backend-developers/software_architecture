@@ -11,26 +11,30 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 
-from stagedoor.alerts import notify_sales_team
-from stagedoor.analytics import record_sale
-from stagedoor.bus import MessageBus
-from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
-from stagedoor.db import SqlAlchemyUnitOfWork, connect
-from stagedoor.events import BookingConfirmed
-from stagedoor.fulfilment import create_fulfilment
-from stagedoor.handlers import (
+from stagedoor.adapters.alerts import notify_sales_team
+from stagedoor.adapters.analytics import record_sale
+from stagedoor.adapters.email import create_mailer
+from stagedoor.adapters.fulfilment import create_fulfilment
+from stagedoor.adapters.loyalty import award_points
+from stagedoor.adapters.payments import create_payment_method
+from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
+from stagedoor.application.bus import MessageBus
+from stagedoor.application.commands import (
+    CancelBooking,
+    CheckIn,
+    MakeBooking,
+    MarkPaid,
+)
+from stagedoor.application.handlers import (
     cancel_booking,
     check_in,
     make_booking,
     mark_paid,
     send_confirmation,
 )
-from stagedoor.loyalty import award_points
-from stagedoor.notifications import create_mailer
-from stagedoor.payments import create_payment_method
-from stagedoor.payments.base import PaymentMethod
+from stagedoor.application.ports import PaymentMethod, UnitOfWork
+from stagedoor.domain.events import BookingConfirmed
 from stagedoor.settings import Settings
-from stagedoor.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,7 @@ class App:
     payment_methods: Mapping[str, PaymentMethod]
     bus: MessageBus
     unit_of_work: Callable[[], UnitOfWork]
+    clock: Callable[[], datetime]
 
 
 def bootstrap(
@@ -66,6 +71,7 @@ def bootstrap(
             for name in sorted(settings.payment_methods)
         }
     fulfilment = create_fulfilment(settings, sleep)
+    clock = clock or now
 
     bus = MessageBus()
     bus.register(
@@ -75,7 +81,7 @@ def bootstrap(
             payment_methods=payment_methods,
             fulfilment=fulfilment,
             unit_of_work=unit_of_work,
-            clock=clock or now,
+            clock=clock,
         ),
     )
     bus.register(
@@ -108,7 +114,10 @@ def bootstrap(
     bus.subscribe(BookingConfirmed, notify_sales_team)
 
     return App(
-        payment_methods=payment_methods, bus=bus, unit_of_work=unit_of_work
+        payment_methods=payment_methods,
+        bus=bus,
+        unit_of_work=unit_of_work,
+        clock=clock,
     )
 
 

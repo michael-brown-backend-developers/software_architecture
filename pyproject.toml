@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-stagedoor = "stagedoor.cli:main"
+stagedoor = "stagedoor.entrypoints.cli:main"
 
 [tool.poetry]
 packages = [
@@ -59,5 +59,37 @@ dev = [
     "pytest (>=9.1.1,<10.0.0)",
     "mypy (>=2.3.1,<3.0.0)",
     "ruff (>=0.16.9,<0.17.0)",
-    "httpx2 (>=2.13,<3.0)"
+    "httpx2 (>=2.13,<3.0)",
+    "import-linter (>=2.0,<3.0)"
+]
+
+[tool.importlinter]
+root_package = "stagedoor"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Every dependency points inwards"
+type = "layers"
+layers = [
+    "stagedoor.entrypoints",
+    "stagedoor.adapters",
+    "stagedoor.application",
+    "stagedoor.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "The inside uses nobody else's libraries"
+type = "forbidden"
+source_modules = ["stagedoor.domain", "stagedoor.application"]
+forbidden_modules = [
+    "sqlalchemy",
+    "psycopg",
+    "fastapi",
+    "pydantic",
+    "fakestripe",
+    "fakepaypal",
+    "fakevenue",
+    "fakewallet",
+    "fakeroyalmail",
+    "fakemailer",
 ]

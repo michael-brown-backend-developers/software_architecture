@@ -4,8 +4,8 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.exceptions import IllegalTransitionError
-from stagedoor.models import (
+from stagedoor.domain.exceptions import IllegalTransitionError
+from stagedoor.domain.models import (
     ALLOWED_TRANSITIONS,
     Booking,
     BookingLine,

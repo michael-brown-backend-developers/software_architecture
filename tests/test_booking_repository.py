@@ -10,11 +10,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from fakes import InMemoryBookingRepository
 
-from stagedoor.db import SqlAlchemyUnitOfWork, connect
-from stagedoor.exceptions import BookingNotFoundError
-from stagedoor.models import (
+from stagedoor.adapters.in_memory import InMemoryBookingRepository
+from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
+from stagedoor.application.ports import BookingRepository
+from stagedoor.domain.exceptions import BookingNotFoundError
+from stagedoor.domain.models import (
     Address,
     Booking,
     BookingLine,
@@ -22,7 +23,6 @@ from stagedoor.models import (
     Customer,
     ItemKind,
 )
-from stagedoor.repository import BookingRepository
 
 
 @pytest.fixture(params=["memory", "postgres"])

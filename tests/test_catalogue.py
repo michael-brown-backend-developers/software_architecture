@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.catalogue import get_item, list_items
-from stagedoor.exceptions import UnknownItemError
+from stagedoor.domain.catalogue import get_item, list_items
+from stagedoor.domain.exceptions import UnknownItemError
 
 
 def test_get_item_returns_the_item() -> None:

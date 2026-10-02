@@ -3,8 +3,8 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.events import BookingConfirmed
-from stagedoor.loyalty import award_points, points_for
+from stagedoor.adapters.loyalty import award_points, points_for
+from stagedoor.domain.events import BookingConfirmed
 
 
 def confirmed(email: str, total: str) -> BookingConfirmed:

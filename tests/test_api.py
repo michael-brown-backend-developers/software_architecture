@@ -3,8 +3,8 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from stagedoor.api import api, stagedoor
 from stagedoor.bootstrap import App
+from stagedoor.entrypoints.api import api, stagedoor
 
 
 @pytest.fixture

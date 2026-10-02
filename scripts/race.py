@@ -22,13 +22,13 @@ from pathlib import Path
 
 from sqlalchemy import update
 
+from stagedoor.adapters.payments import create_payment_method
+from stagedoor.adapters.postgres import PerformanceRow, connect, create_tables
+from stagedoor.application.commands import MakeBooking
+from stagedoor.application.ports import PaymentMethod, PaymentResult
 from stagedoor.bootstrap import bootstrap
-from stagedoor.commands import MakeBooking
-from stagedoor.db import PerformanceRow, connect, create_tables
-from stagedoor.exceptions import StageDoorError
-from stagedoor.models import Booking, Customer
-from stagedoor.payments import create_payment_method
-from stagedoor.payments.base import PaymentMethod, PaymentResult
+from stagedoor.domain.exceptions import StageDoorError
+from stagedoor.domain.models import Booking, Customer
 from stagedoor.settings import Settings
 
 

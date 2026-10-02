@@ -7,12 +7,12 @@ import fakevenue
 import fakewallet
 import pytest
 
-from stagedoor.exceptions import FulfilmentError
-from stagedoor.fulfilment import Fulfilment
-from stagedoor.fulfilment.royal_mail import RoyalMailShipping
-from stagedoor.fulfilment.venue import VenueHolds
-from stagedoor.fulfilment.wallet import WalletPasses
-from stagedoor.models import (
+from stagedoor.adapters.fulfilment import VenueFulfilment
+from stagedoor.adapters.fulfilment.royal_mail import RoyalMailShipping
+from stagedoor.adapters.fulfilment.venue import VenueHolds
+from stagedoor.adapters.fulfilment.wallet import WalletPasses
+from stagedoor.domain.exceptions import FulfilmentError
+from stagedoor.domain.models import (
     Address,
     Booking,
     BookingLine,
@@ -62,8 +62,8 @@ def waits() -> list[float]:
 
 
 @pytest.fixture
-def fulfilment(waits: list[float]) -> Fulfilment:
-    return Fulfilment(
+def fulfilment(waits: list[float]) -> VenueFulfilment:
+    return VenueFulfilment(
         venue=VenueHolds("https://venue.test", "key", sleep=waits.append),
         wallet=WalletPasses("key"),
         royal_mail=RoyalMailShipping("key", sleep=waits.append),
@@ -71,7 +71,7 @@ def fulfilment(waits: list[float]) -> Fulfilment:
 
 
 def test_e_tickets_are_held_issued_and_invoiced(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: VenueFulfilment, ada: Customer
 ) -> None:
     result = fulfilment.fulfil(
         booking_for(ada, "e_ticket", ticket("MUC0314", 2))
@@ -85,7 +85,7 @@ def test_e_tickets_are_held_issued_and_invoiced(
 
 
 def test_posted_tickets_are_sent_by_royal_mail(
-    fulfilment: Fulfilment, ada_at_home: Customer
+    fulfilment: VenueFulfilment, ada_at_home: Customer
 ) -> None:
     result = fulfilment.fulfil(
         booking_for(ada_at_home, "post", ticket("MUC0314", 2))
@@ -97,7 +97,7 @@ def test_posted_tickets_are_sent_by_royal_mail(
 
 
 def test_a_failed_label_gives_the_seats_back(
-    fulfilment: Fulfilment, ada_at_home: Customer
+    fulfilment: VenueFulfilment, ada_at_home: Customer
 ) -> None:
     assert ada_at_home.address is not None
     nowhere = replace(ada_at_home.address, postcode="XX1 1XX")
@@ -110,7 +110,7 @@ def test_a_failed_label_gives_the_seats_back(
 
 
 def test_a_wallet_outage_gives_the_seats_back(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: VenueFulfilment, ada: Customer
 ) -> None:
     fakewallet.simulate_outage = True
 
@@ -121,7 +121,7 @@ def test_a_wallet_outage_gives_the_seats_back(
 
 
 def test_a_refused_hold_gives_back_the_ones_already_made(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: VenueFulfilment, ada: Customer
 ) -> None:
     booking = booking_for(
         ada, "box_office", ticket("MUC0314", 2), ticket("GDF0320", 3)
@@ -134,7 +134,7 @@ def test_a_refused_hold_gives_back_the_ones_already_made(
 
 
 def test_collected_tickets_are_held_and_invoiced_only(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: VenueFulfilment, ada: Customer
 ) -> None:
     result = fulfilment.fulfil(
         booking_for(ada, "box_office", ticket("MUC0315", 4))
@@ -146,7 +146,7 @@ def test_collected_tickets_are_held_and_invoiced_only(
 
 
 def test_posting_to_the_eu_uses_royal_mails_eu_service(
-    fulfilment: Fulfilment, ada: Customer
+    fulfilment: VenueFulfilment, ada: Customer
 ) -> None:
     paris = Address("1 Rue de Rivoli", "Paris", "75001", "FR")
     customer = replace(ada, address=paris)
@@ -160,7 +160,7 @@ def test_posting_to_the_eu_uses_royal_mails_eu_service(
 
 
 def test_a_brief_royal_mail_outage_is_tried_again(
-    fulfilment: Fulfilment, ada_at_home: Customer, waits: list[float]
+    fulfilment: VenueFulfilment, ada_at_home: Customer, waits: list[float]
 ) -> None:
     fakeroyalmail.simulate_outage = 1
 
@@ -173,7 +173,7 @@ def test_a_brief_royal_mail_outage_is_tried_again(
 
 
 def test_a_brief_venue_outage_is_tried_again(
-    fulfilment: Fulfilment, ada: Customer, waits: list[float]
+    fulfilment: VenueFulfilment, ada: Customer, waits: list[float]
 ) -> None:
     fakevenue.simulate_outage = 1
 

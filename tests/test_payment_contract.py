@@ -10,10 +10,13 @@ from decimal import Decimal
 import pytest
 from fakes import DECLINED, FakePaymentMethod
 
-from stagedoor.exceptions import MissingPaymentTokenError, PaymentFailedError
-from stagedoor.models import PaymentStatus
-from stagedoor.payments.base import PaymentMethod
-from stagedoor.payments.stripe import StripeCardPayment
+from stagedoor.adapters.payments.stripe import StripeCardPayment
+from stagedoor.application.ports import PaymentMethod
+from stagedoor.domain.exceptions import (
+    MissingPaymentTokenError,
+    PaymentFailedError,
+)
+from stagedoor.domain.models import PaymentStatus
 
 AMOUNT = Decimal("64.00")
 

@@ -1,3 +1,3 @@
-from stagedoor.cli import main
+from stagedoor.entrypoints.cli import main
 
 raise SystemExit(main())

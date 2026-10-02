@@ -6,12 +6,12 @@ The PostgreSQL tests are skipped if the database is not running.
 from decimal import Decimal
 
 import pytest
-from fakes import InMemoryUnitOfWork
 
-from stagedoor.db import SqlAlchemyUnitOfWork, connect
-from stagedoor.exceptions import NotEnoughPlacesError
-from stagedoor.models import BookingLine, ItemKind
-from stagedoor.unit_of_work import UnitOfWork
+from stagedoor.adapters.in_memory import InMemoryUnitOfWork
+from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
+from stagedoor.application.ports import UnitOfWork
+from stagedoor.domain.exceptions import NotEnoughPlacesError
+from stagedoor.domain.models import BookingLine, ItemKind
 
 LAST_TWO = [
     BookingLine(

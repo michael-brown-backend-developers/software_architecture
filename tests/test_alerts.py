@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from stagedoor.alerts import notify_sales_team
-from stagedoor.events import BookingConfirmed
+from stagedoor.adapters.alerts import notify_sales_team
+from stagedoor.domain.events import BookingConfirmed
 
 
 def confirmed(total: str) -> BookingConfirmed:

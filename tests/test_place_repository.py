@@ -7,12 +7,12 @@ from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
-from fakes import InMemoryPlaceRepository
 
-from stagedoor.db import SqlAlchemyUnitOfWork, connect
-from stagedoor.exceptions import NotEnoughPlacesError
-from stagedoor.models import BookingLine, ItemKind
-from stagedoor.repository import PlaceRepository
+from stagedoor.adapters.in_memory import InMemoryPlaceRepository
+from stagedoor.adapters.postgres import SqlAlchemyUnitOfWork, connect
+from stagedoor.application.ports import PlaceRepository
+from stagedoor.domain.exceptions import NotEnoughPlacesError
+from stagedoor.domain.models import BookingLine, ItemKind
 
 
 @pytest.fixture(params=["memory", "postgres"])

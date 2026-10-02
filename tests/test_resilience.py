@@ -2,8 +2,8 @@ import logging
 
 import pytest
 
-from stagedoor.exceptions import TransientError
-from stagedoor.resilience import retry, timed
+from stagedoor.adapters.resilience import retry, timed
+from stagedoor.domain.exceptions import TransientError
 
 
 def no_sleep(seconds: float) -> None:

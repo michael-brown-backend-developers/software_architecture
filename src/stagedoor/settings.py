@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from stagedoor.exceptions import SettingsError
+from stagedoor.domain.exceptions import SettingsError
 
 ALL_PAYMENT_METHODS = "card,paypal,bank_transfer"
 

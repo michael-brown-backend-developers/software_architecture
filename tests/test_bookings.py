@@ -7,20 +7,23 @@ import fakemailer
 import fakestripe
 import fakevenue
 import pytest
-from fakes import (
-    FailingRepository,
-    FakePaymentMethod,
+from fakes import FailingRepository, FakePaymentMethod, mail_about, no_sleep
+
+from stagedoor.adapters.in_memory import (
     InMemoryPlaceRepository,
     InMemoryUnitOfWork,
-    mail_about,
-    no_sleep,
 )
-
-from stagedoor import views
+from stagedoor.application import views
+from stagedoor.application.commands import (
+    CancelBooking,
+    CheckIn,
+    MakeBooking,
+    MarkPaid,
+)
+from stagedoor.application.worker import work
 from stagedoor.bootstrap import App, bootstrap
-from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
-from stagedoor.events import BookingConfirmed
-from stagedoor.exceptions import (
+from stagedoor.domain.events import BookingConfirmed
+from stagedoor.domain.exceptions import (
     EmptyBookingError,
     FulfilmentError,
     IllegalTransitionError,
@@ -31,9 +34,8 @@ from stagedoor.exceptions import (
     UnknownDiscountCodeError,
     UnknownItemError,
 )
-from stagedoor.models import Address, Booking, BookingStatus, Customer
+from stagedoor.domain.models import Address, Booking, BookingStatus, Customer
 from stagedoor.settings import Settings
-from stagedoor.worker import work
 
 
 def book(
@@ -85,7 +87,7 @@ def test_the_customer_is_sent_a_confirmation(
     app: App, ada: Customer, isolated_directories: Path
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
 
     confirmation = mail_about(booking.id, isolated_directories / "mail")
     assert "To: ada@example.com" in confirmation
@@ -182,7 +184,7 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
     app: App, ada: Customer, isolated_directories: Path
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
 
     confirmation = mail_about(booking.id, isolated_directories / "mail")
     assert f"quoting SD-{booking.id.upper()}" in confirmation
@@ -290,7 +292,7 @@ def test_a_booking_is_announced(app: App, ada: Customer) -> None:
     app.bus.subscribe(BookingConfirmed, heard.append)
 
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
 
     assert heard == [
         BookingConfirmed(
@@ -309,7 +311,7 @@ def test_a_reaction_that_fails_does_not_fail_the_booking(
     ada = Customer(name="Ada Lovelace", email="ada+shows@example.com")
 
     booking = book(app, ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
 
     assert views.booking(booking.id, app.unit_of_work) == booking
     assert "award_points failed" in caplog.text

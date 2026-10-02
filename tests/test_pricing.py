@@ -2,9 +2,9 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.exceptions import UnknownDiscountCodeError
-from stagedoor.models import BookingLine, ItemKind
-from stagedoor.pricing import Totals, price_booking, vat_included
+from stagedoor.domain.exceptions import UnknownDiscountCodeError
+from stagedoor.domain.models import BookingLine, ItemKind
+from stagedoor.domain.pricing import Totals, price_booking, vat_included
 
 MUCH_ADO = BookingLine(
     "MUC0314-ADULT",

@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from stagedoor.invoicing import create_invoice
-from stagedoor.models import Booking, BookingStatus, Customer
+from stagedoor.adapters.fulfilment.invoicing import create_invoice
+from stagedoor.domain.models import Booking, BookingStatus, Customer
 
 
 def test_invoice_numbers_follow_on_with_no_gaps(

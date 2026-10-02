@@ -1,8 +1,11 @@
 import pytest
 
+from stagedoor.application.ports import get_payment_method
 from stagedoor.bootstrap import bootstrap
-from stagedoor.exceptions import SettingsError, UnknownPaymentMethodError
-from stagedoor.payments import get_payment_method
+from stagedoor.domain.exceptions import (
+    SettingsError,
+    UnknownPaymentMethodError,
+)
 from stagedoor.settings import Settings
 
 PRODUCTION = {

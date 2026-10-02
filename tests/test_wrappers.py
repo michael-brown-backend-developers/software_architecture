@@ -3,13 +3,16 @@ from decimal import Decimal
 
 import pytest
 
-from stagedoor.exceptions import PaymentFailedError, PaymentUnavailableError
-from stagedoor.models import Booking, PaymentStatus
-from stagedoor.payments.base import PaymentResult
-from stagedoor.payments.wrappers import (
+from stagedoor.adapters.payments.wrappers import (
     LoggingPaymentMethod,
     RetryingPaymentMethod,
 )
+from stagedoor.application.ports import PaymentResult
+from stagedoor.domain.exceptions import (
+    PaymentFailedError,
+    PaymentUnavailableError,
+)
+from stagedoor.domain.models import Booking, PaymentStatus
 
 AMOUNT = Decimal("63.00")
 

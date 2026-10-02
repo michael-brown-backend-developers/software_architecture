@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from stagedoor.analytics import record_sale
-from stagedoor.events import BookingConfirmed
+from stagedoor.adapters.analytics import record_sale
+from stagedoor.domain.events import BookingConfirmed
 
 
 def test_every_sale_is_a_row_under_a_heading(

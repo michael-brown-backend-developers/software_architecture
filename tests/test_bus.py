@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from stagedoor.bus import MessageBus
-from stagedoor.commands import Command
+from stagedoor.application.bus import MessageBus
+from stagedoor.application.commands import Command
 
 
 @dataclass(frozen=True)

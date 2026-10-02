@@ -6,13 +6,13 @@ import fakemailer
 import pytest
 from fakes import mail_about
 
-from stagedoor import views
+from stagedoor.adapters.loyalty import points_for
+from stagedoor.application import views
+from stagedoor.application.commands import MakeBooking
+from stagedoor.application.worker import handle_next, work
 from stagedoor.bootstrap import App, now
-from stagedoor.commands import MakeBooking
-from stagedoor.events import BookingConfirmed
-from stagedoor.loyalty import points_for
-from stagedoor.models import BookingStatus, Customer
-from stagedoor.worker import handle_next, work
+from stagedoor.domain.events import BookingConfirmed
+from stagedoor.domain.models import BookingStatus, Customer
 
 
 def days_from_now(days: int) -> Callable[[], datetime]:
@@ -39,7 +39,7 @@ def test_the_confirmation_is_sent_by_the_worker(
     booking_id = book(app, ada)
     assert mail_about(booking_id, mail) == ""
 
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
 
     assert "Total: £18.00" in mail_about(booking_id, mail)
 
@@ -62,7 +62,7 @@ def test_an_email_that_cannot_be_sent_is_tried_again_later(
     fakemailer.simulate_outage = 1
     booking_id = book(app, ada)
 
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
     assert mail_about(booking_id, mail) == ""
 
     in_two_seconds = now() + timedelta(seconds=2)
@@ -82,7 +82,7 @@ def test_a_retry_does_not_repeat_what_already_worked(
     app.bus.subscribe(BookingConfirmed, flaky)
     booking_id = book(app, ada)
 
-    work(app.bus, app.unit_of_work, once=True)
+    work(app.bus, app.unit_of_work, app.clock, once=True)
     in_two_seconds = now() + timedelta(seconds=2)
     handle_next(app.bus, app.unit_of_work, lambda: in_two_seconds)
 
