@@ -8,13 +8,16 @@ import fakestripe
 import fakevenue
 import fakewallet
 import pytest
-from fakes import InMemoryBookingRepository, no_sleep
+from fakes import (
+    InMemoryBookingRepository,
+    InMemoryPlaceRepository,
+    no_sleep,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from stagedoor.bookings import BookingService
 from stagedoor.bootstrap import App, bootstrap
-from stagedoor.capacity import PLACES
 from stagedoor.db import Base, create_tables
 from stagedoor.models import Address, Customer
 from stagedoor.settings import Settings
@@ -44,16 +47,19 @@ def test_database() -> str:
             pass
     except OperationalError:
         pytest.skip("PostgreSQL is not running: docker compose up -d")
+    # The tables are made afresh, in case they have changed since last time.
+    Base.metadata.drop_all(create_engine(TEST_DATABASE_URL))
     create_tables(TEST_DATABASE_URL)
     return TEST_DATABASE_URL
 
 
 @pytest.fixture
 def database(test_database: str) -> str:
-    """The test database, emptied before the test."""
+    """The test database, emptied, with every performance's places back."""
     with create_engine(test_database).begin() as connection:
         for table in reversed(Base.metadata.sorted_tables):
             connection.execute(text(f"DELETE FROM {table.name}"))
+    create_tables(test_database)
     return test_database
 
 
@@ -75,18 +81,17 @@ def app(settings: Settings) -> App:
 
 
 @pytest.fixture
-def service(app: App) -> BookingService:
-    """The booking service, keeping its bookings in memory."""
-    return replace(app.bookings, bookings=InMemoryBookingRepository())
+def places() -> InMemoryPlaceRepository:
+    """Every performance, with all of its places."""
+    return InMemoryPlaceRepository()
 
 
-@pytest.fixture(autouse=True)
-def restore_places() -> Iterator[None]:
-    """Put the places back the way they were after every test."""
-    saved = dict(PLACES)
-    yield
-    PLACES.clear()
-    PLACES.update(saved)
+@pytest.fixture
+def service(app: App, places: InMemoryPlaceRepository) -> BookingService:
+    """The booking service, keeping its bookings and places in memory."""
+    return replace(
+        app.bookings, bookings=InMemoryBookingRepository(), places=places
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -5,15 +5,18 @@ keeps a record of what was asked of it, so a test can check what happened
 rather than how.
 """
 
+from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
 
+from stagedoor.capacity import CAPACITY, places_wanted
 from stagedoor.exceptions import (
     BookingNotFoundError,
     MissingPaymentTokenError,
+    NotEnoughPlacesError,
     PaymentFailedError,
 )
-from stagedoor.models import Booking, PaymentStatus
+from stagedoor.models import Booking, BookingLine, PaymentStatus
 from stagedoor.payments.base import PaymentResult
 
 DECLINED = "declined"
@@ -76,6 +79,27 @@ class FailingRepository(InMemoryBookingRepository):
 
     def add(self, booking: Booking) -> None:
         raise OSError("No space left on device")
+
+
+class InMemoryPlaceRepository:
+    """The places left for every performance, in a dictionary."""
+
+    def __init__(self) -> None:
+        self.left: dict[str, int] = dict(CAPACITY)
+
+    def check(self, lines: Sequence[BookingLine]) -> None:
+        for performance, quantity in places_wanted(lines).items():
+            available = self.left.get(performance, 0)
+            if available < quantity:
+                raise NotEnoughPlacesError(performance, quantity, available)
+
+    def take(self, lines: Sequence[BookingLine]) -> None:
+        for performance, quantity in places_wanted(lines).items():
+            self.left[performance] -= quantity
+
+    def give_back(self, lines: Sequence[BookingLine]) -> None:
+        for performance, quantity in places_wanted(lines).items():
+            self.left[performance] += quantity
 
 
 def no_sleep(seconds: float) -> None:

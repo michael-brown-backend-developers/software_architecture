@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from stagedoor.bus import EventBus
-from stagedoor.capacity import check_places, give_back_places, take_places
 from stagedoor.catalogue import get_item
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
@@ -25,7 +24,7 @@ from stagedoor.notifications import Mailer
 from stagedoor.payments import get_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.pricing import price_booking
-from stagedoor.repository import BookingRepository
+from stagedoor.repository import BookingRepository, PlaceRepository
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -39,6 +38,7 @@ class BookingService:
     payment_methods: Mapping[str, PaymentMethod]
     fulfilment: Fulfilment
     bookings: BookingRepository
+    places: PlaceRepository
     mailer: Mailer
     bus: EventBus
     clock: Callable[[], datetime]
@@ -69,7 +69,7 @@ class BookingService:
         method = get_payment_method(payment_method, self.payment_methods)
 
         lines = [_booking_line(code, quantity) for code, quantity in items]
-        check_places(lines)
+        self.places.check(lines)
         totals = price_booking(lines, discount_code, delivery)
         payment = method.charge(totals.total, booking_id, payment_token)
 
@@ -99,7 +99,7 @@ class BookingService:
         if booking.status == BookingStatus.PAID:
             self._issue_tickets(booking)
 
-        take_places(lines)
+        self.places.take(lines)
         self.bookings.add(booking)
         self.mailer.send_confirmation(booking, method)
         self.bus.publish(
@@ -143,7 +143,7 @@ class BookingService:
                 booking.payment_method, self.payment_methods
             )
             method.refund(booking.payment_reference, booking.total)
-        give_back_places(booking.lines)
+        self.places.give_back(booking.lines)
         self.bookings.save(booking)
         return booking
 

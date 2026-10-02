@@ -1,12 +1,13 @@
-"""Keeping bookings in PostgreSQL, with SQLAlchemy.
+"""Keeping bookings and places in PostgreSQL, with SQLAlchemy.
 
 This is the only module in StageDoor that knows SQLAlchemy exists. Each
 Row class is a table, and each attribute a column: a booking is one row in
-bookings, and one row in booking_lines for each thing on it. The
-repository turns bookings into rows and back, so nothing outside this
-module ever sees a row.
+bookings, and one row in booking_lines for each thing on it, and each
+performance is one row in performances. The repositories turn bookings
+into rows and back, so nothing outside this module ever sees a row.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 
@@ -21,7 +22,8 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from stagedoor.exceptions import BookingNotFoundError
+from stagedoor.capacity import CAPACITY, places_wanted
+from stagedoor.exceptions import BookingNotFoundError, NotEnoughPlacesError
 from stagedoor.models import (
     Address,
     Booking,
@@ -82,6 +84,13 @@ class BookingLineRow(Base):
     quantity: Mapped[int]
 
 
+class PerformanceRow(Base):
+    __tablename__ = "performances"
+
+    code: Mapped[str] = mapped_column(String(7), primary_key=True)
+    places: Mapped[int]
+
+
 class SqlAlchemyBookingRepository:
     """Bookings, kept in PostgreSQL."""
 
@@ -103,14 +112,53 @@ class SqlAlchemyBookingRepository:
             session.commit()
 
 
+class SqlAlchemyPlaceRepository:
+    """The places left for every performance, kept in PostgreSQL."""
+
+    def __init__(self, sessions: sessionmaker[Session]) -> None:
+        self.sessions = sessions
+
+    def check(self, lines: Sequence[BookingLine]) -> None:
+        with self.sessions() as session:
+            for performance, quantity in places_wanted(lines).items():
+                row = session.get(PerformanceRow, performance)
+                available = row.places if row else 0
+                if available < quantity:
+                    raise NotEnoughPlacesError(
+                        performance, quantity, available
+                    )
+
+    def take(self, lines: Sequence[BookingLine]) -> None:
+        with self.sessions() as session:
+            for performance, quantity in places_wanted(lines).items():
+                session.get_one(PerformanceRow, performance).places -= quantity
+            session.commit()
+
+    def give_back(self, lines: Sequence[BookingLine]) -> None:
+        with self.sessions() as session:
+            for performance, quantity in places_wanted(lines).items():
+                session.get_one(PerformanceRow, performance).places += quantity
+            session.commit()
+
+
 def connect(url: str) -> sessionmaker[Session]:
     """Sessions with the database at ``url``. Nothing connects until used."""
     return sessionmaker(_create_engine(url), expire_on_commit=False)
 
 
 def create_tables(url: str) -> None:
-    """Create any of StageDoor's tables that do not exist yet."""
-    Base.metadata.create_all(_create_engine(url))
+    """Create any of StageDoor's tables that do not exist yet.
+
+    Every performance that is not in the database yet goes on sale with all
+    of its places.
+    """
+    engine = _create_engine(url)
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        for code, places in CAPACITY.items():
+            if session.get(PerformanceRow, code) is None:
+                session.add(PerformanceRow(code=code, places=places))
+        session.commit()
 
 
 def _load_row(session: Session, booking_id: str) -> BookingRow:

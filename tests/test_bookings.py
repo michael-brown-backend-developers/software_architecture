@@ -6,11 +6,14 @@ from pathlib import Path
 import fakestripe
 import fakevenue
 import pytest
-from fakes import FailingRepository, FakePaymentMethod
+from fakes import (
+    FailingRepository,
+    FakePaymentMethod,
+    InMemoryPlaceRepository,
+)
 
 from stagedoor.bookings import BookingService
 from stagedoor.bus import EventBus
-from stagedoor.capacity import PLACES
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
     EmptyBookingError,
@@ -118,11 +121,11 @@ def test_an_unknown_discount_code_is_rejected(
 
 
 def test_booking_takes_the_places(
-    service: BookingService, ada: Customer
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
     service.place(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
 
-    assert PLACES["GDF0320"] == 0
+    assert places.left["GDF0320"] == 0
 
 
 def test_we_cannot_sell_places_we_do_not_have(
@@ -133,14 +136,14 @@ def test_we_cannot_sell_places_we_do_not_have(
 
 
 def test_a_rejected_booking_leaves_the_places_alone(
-    service: BookingService, ada: Customer
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
     with pytest.raises(NotEnoughPlacesError):
         service.place(
             ada, [("MUC0314-ADULT", 5), ("GDF0320-ADULT", 3)], "bank_transfer"
         )
 
-    assert PLACES["MUC0314"] == 120
+    assert places.left["MUC0314"] == 120
 
 
 def test_the_booking_records_its_payment(
@@ -168,22 +171,25 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
 
 
 def test_a_declined_card_says_why_and_books_nothing(
-    service: BookingService, ada: Customer
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
     with pytest.raises(PaymentFailedError, match="Your card was declined."):
         service.place(ada, [("GDF0320-ADULT", 1)], "card", "pm_card_declined")
 
-    assert PLACES["GDF0320"] == 2
+    assert places.left["GDF0320"] == 2
 
 
 def test_a_declined_paypal_payment_says_why_and_books_nothing(
-    service: BookingService, ada: Customer, isolated_directories: Path
+    service: BookingService,
+    ada: Customer,
+    isolated_directories: Path,
+    places: InMemoryPlaceRepository,
 ) -> None:
     with pytest.raises(PaymentFailedError, match="PayPal declined"):
         service.place(ada, [("GDF0320-ADULT", 1)], "paypal", "payer_declined")
 
     assert not (isolated_directories / "data").exists()
-    assert PLACES["GDF0320"] == 2
+    assert places.left["GDF0320"] == 2
 
 
 def test_a_bank_transfer_booking_is_awaiting_payment(
@@ -225,7 +231,9 @@ def test_posted_tickets_get_a_tracking_number(
 
 
 def test_a_failed_label_gives_the_seats_back(
-    service: BookingService, ada_at_home: Customer
+    service: BookingService,
+    ada_at_home: Customer,
+    places: InMemoryPlaceRepository,
 ) -> None:
     nowhere = Address("1 Nowhere Lane", "Nowhere", "XX1 1XX", "GB")
 
@@ -239,7 +247,7 @@ def test_a_failed_label_gives_the_seats_back(
         )
 
     assert fakevenue.SEATS["MUC0314"] == 120
-    assert PLACES["MUC0314"] == 120
+    assert places.left["MUC0314"] == 120
 
 
 def test_posted_tickets_need_an_address(
@@ -343,24 +351,23 @@ def test_a_booking_cannot_be_checked_in_twice(
 
 
 def test_cancelling_an_unpaid_booking_gives_the_places_back(
-    service: BookingService,
-    ada: Customer,
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
     booking = service.place(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
 
     assert service.cancel(booking.id).status == BookingStatus.CANCELLED
-    assert PLACES["GDF0320"] == 2
+    assert places.left["GDF0320"] == 2
 
 
 def test_cancelling_a_paid_booking_refunds_it(
-    service: BookingService, ada: Customer
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
     booking = service.place(
         ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa"
     )
 
     assert service.cancel(booking.id).status == BookingStatus.REFUNDED
-    assert PLACES["MUC0314"] == 120
+    assert places.left["MUC0314"] == 120
     assert fakevenue.SEATS["MUC0314"] == 120
 
 
@@ -428,6 +435,20 @@ def test_a_booking_that_cannot_be_saved_is_not_paid_for(
         service.place(ada, [("TEE-STAGEDOOR", 1)], "card", "tok_ok")
 
     assert card.charges == []
+
+
+@pytest.mark.xfail(
+    strict=True, reason="places taken, never booked: chapter 11"
+)
+def test_a_booking_that_cannot_be_saved_gives_its_places_back(
+    service: BookingService, ada: Customer, places: InMemoryPlaceRepository
+) -> None:
+    service = replace(service, bookings=FailingRepository())
+
+    with pytest.raises(OSError):
+        service.place(ada, [("GDF0320-ADULT", 2)], "bank_transfer")
+
+    assert places.left["GDF0320"] == 2
 
 
 def test_a_booking_survives_a_busy_moment_at_stripe(
