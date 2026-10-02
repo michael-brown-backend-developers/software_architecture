@@ -8,11 +8,7 @@ import fakestripe
 import fakevenue
 import fakewallet
 import pytest
-from fakes import (
-    InMemoryBookingRepository,
-    InMemoryPlaceRepository,
-    no_sleep,
-)
+from fakes import InMemoryPlaceRepository, InMemoryUnitOfWork, no_sleep
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
@@ -89,9 +85,8 @@ def places() -> InMemoryPlaceRepository:
 @pytest.fixture
 def service(app: App, places: InMemoryPlaceRepository) -> BookingService:
     """The booking service, keeping its bookings and places in memory."""
-    return replace(
-        app.bookings, bookings=InMemoryBookingRepository(), places=places
-    )
+    uow = InMemoryUnitOfWork(places=places)
+    return replace(app.bookings, unit_of_work=lambda: uow)
 
 
 @pytest.fixture(autouse=True)

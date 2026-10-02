@@ -9,17 +9,14 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from uuid import uuid4
 
 from stagedoor.alerts import notify_sales_team
 from stagedoor.analytics import record_sale
 from stagedoor.bookings import BookingService
 from stagedoor.bus import EventBus
-from stagedoor.db import (
-    SqlAlchemyBookingRepository,
-    SqlAlchemyPlaceRepository,
-    connect,
-)
+from stagedoor.db import SqlAlchemyUnitOfWork, connect
 from stagedoor.events import BookingConfirmed
 from stagedoor.fulfilment import create_fulfilment
 from stagedoor.loyalty import award_points
@@ -60,8 +57,7 @@ def bootstrap(
         bookings=BookingService(
             payment_methods=payment_methods,
             fulfilment=create_fulfilment(settings, sleep),
-            bookings=SqlAlchemyBookingRepository(sessions),
-            places=SqlAlchemyPlaceRepository(sessions),
+            unit_of_work=partial(SqlAlchemyUnitOfWork, sessions),
             mailer=Mailer(settings.mail_dir),
             bus=bus,
             clock=now,

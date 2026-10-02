@@ -10,8 +10,9 @@ into rows and back, so nothing outside this module ever sees a row.
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
+from typing import Self
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Numeric, String, update
 from sqlalchemy import create_engine as _create_engine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -92,53 +93,74 @@ class PerformanceRow(Base):
 
 
 class SqlAlchemyBookingRepository:
-    """Bookings, kept in PostgreSQL."""
+    """Bookings, kept in PostgreSQL, in a session it is given."""
 
-    def __init__(self, sessions: sessionmaker[Session]) -> None:
-        self.sessions = sessions
+    def __init__(self, session: Session) -> None:
+        self.session = session
 
     def add(self, booking: Booking) -> None:
-        with self.sessions() as session:
-            session.add(_to_row(booking))
-            session.commit()
+        self.session.add(_to_row(booking))
 
     def get(self, booking_id: str) -> Booking:
-        with self.sessions() as session:
-            return _to_booking(_load_row(session, booking_id))
+        return _to_booking(_load_row(self.session, booking_id))
 
     def save(self, booking: Booking) -> None:
-        with self.sessions() as session:
-            _update_row(_load_row(session, booking.id), booking)
-            session.commit()
+        _update_row(_load_row(self.session, booking.id), booking)
 
 
 class SqlAlchemyPlaceRepository:
-    """The places left for every performance, kept in PostgreSQL."""
+    """The places left for every performance, in a session it is given."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def take(self, lines: Sequence[BookingLine]) -> None:
+        for performance, quantity in places_wanted(lines).items():
+            # One statement checks and takes, so nothing can come between.
+            left = self.session.execute(
+                update(PerformanceRow)
+                .where(
+                    PerformanceRow.code == performance,
+                    PerformanceRow.places >= quantity,
+                )
+                .values(places=PerformanceRow.places - quantity)
+                .returning(PerformanceRow.places)
+            ).scalar_one_or_none()
+            if left is None:
+                row = self.session.get(PerformanceRow, performance)
+                available = row.places if row else 0
+                raise NotEnoughPlacesError(performance, quantity, available)
+
+    def give_back(self, lines: Sequence[BookingLine]) -> None:
+        for performance, quantity in places_wanted(lines).items():
+            self.session.execute(
+                update(PerformanceRow)
+                .where(PerformanceRow.code == performance)
+                .values(places=PerformanceRow.places + quantity)
+            )
+
+
+class SqlAlchemyUnitOfWork:
+    """One PostgreSQL transaction, shared by both repositories."""
 
     def __init__(self, sessions: sessionmaker[Session]) -> None:
         self.sessions = sessions
 
-    def check(self, lines: Sequence[BookingLine]) -> None:
-        with self.sessions() as session:
-            for performance, quantity in places_wanted(lines).items():
-                row = session.get(PerformanceRow, performance)
-                available = row.places if row else 0
-                if available < quantity:
-                    raise NotEnoughPlacesError(
-                        performance, quantity, available
-                    )
+    def __enter__(self) -> Self:
+        self.session = self.sessions()
+        self.bookings = SqlAlchemyBookingRepository(self.session)
+        self.places = SqlAlchemyPlaceRepository(self.session)
+        return self
 
-    def take(self, lines: Sequence[BookingLine]) -> None:
-        with self.sessions() as session:
-            for performance, quantity in places_wanted(lines).items():
-                session.get_one(PerformanceRow, performance).places -= quantity
-            session.commit()
+    def __exit__(self, *exc: object) -> None:
+        self.rollback()
+        self.session.close()
 
-    def give_back(self, lines: Sequence[BookingLine]) -> None:
-        with self.sessions() as session:
-            for performance, quantity in places_wanted(lines).items():
-                session.get_one(PerformanceRow, performance).places += quantity
-            session.commit()
+    def commit(self) -> None:
+        self.session.commit()
+
+    def rollback(self) -> None:
+        self.session.rollback()
 
 
 def connect(url: str) -> sessionmaker[Session]:
@@ -254,6 +276,7 @@ def _to_booking(row: BookingRow) -> Booking:
 
 def _update_row(row: BookingRow, booking: Booking) -> None:
     # Only these change once a booking has been made.
+    row.payment_reference = booking.payment_reference
     row.status = booking.status.value
     row.hold_references = list(booking.hold_references)
     row.wallet_pass = booking.wallet_pass

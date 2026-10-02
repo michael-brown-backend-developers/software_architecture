@@ -10,6 +10,7 @@ from fakes import (
     FailingRepository,
     FakePaymentMethod,
     InMemoryPlaceRepository,
+    InMemoryUnitOfWork,
 )
 
 from stagedoor.bookings import BookingService
@@ -412,8 +413,9 @@ def test_a_bank_transfer_is_paid_by_quoting_the_booking_id(
 def test_a_booking_that_cannot_be_saved_is_not_confirmed(
     service: BookingService, ada: Customer, isolated_directories: Path
 ) -> None:
+    uow = InMemoryUnitOfWork(bookings=FailingRepository())
     service = replace(
-        service, bookings=FailingRepository(), new_id=lambda: "abc123"
+        service, unit_of_work=lambda: uow, new_id=lambda: "abc123"
     )
 
     with pytest.raises(OSError):
@@ -423,13 +425,13 @@ def test_a_booking_that_cannot_be_saved_is_not_confirmed(
     assert not (mail / "abc123-confirmation.txt").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="paid for, never saved: chapter 11")
 def test_a_booking_that_cannot_be_saved_is_not_paid_for(
     service: BookingService, ada: Customer
 ) -> None:
     card = FakePaymentMethod()
+    uow = InMemoryUnitOfWork(bookings=FailingRepository())
     service = replace(service, payment_methods={"card": card})
-    service = replace(service, bookings=FailingRepository())
+    service = replace(service, unit_of_work=lambda: uow)
 
     with pytest.raises(OSError):
         service.place(ada, [("TEE-STAGEDOOR", 1)], "card", "tok_ok")
@@ -437,13 +439,11 @@ def test_a_booking_that_cannot_be_saved_is_not_paid_for(
     assert card.charges == []
 
 
-@pytest.mark.xfail(
-    strict=True, reason="places taken, never booked: chapter 11"
-)
 def test_a_booking_that_cannot_be_saved_gives_its_places_back(
     service: BookingService, ada: Customer, places: InMemoryPlaceRepository
 ) -> None:
-    service = replace(service, bookings=FailingRepository())
+    uow = InMemoryUnitOfWork(bookings=FailingRepository(), places=places)
+    service = replace(service, unit_of_work=lambda: uow)
 
     with pytest.raises(OSError):
         service.place(ada, [("GDF0320-ADULT", 2)], "bank_transfer")

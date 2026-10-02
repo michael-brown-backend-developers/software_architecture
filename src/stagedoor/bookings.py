@@ -24,7 +24,7 @@ from stagedoor.notifications import Mailer
 from stagedoor.payments import get_payment_method
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.pricing import price_booking
-from stagedoor.repository import BookingRepository, PlaceRepository
+from stagedoor.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -32,13 +32,14 @@ class BookingService:
     """Everything StageDoor can do with a booking.
 
     It is handed everything it works with - even the clock, and where
-    booking IDs come from - and reaches for nothing itself.
+    booking IDs come from - and reaches for nothing itself. Each thing it
+    does to bookings and places is a unit of work: kept whole, or not at
+    all.
     """
 
     payment_methods: Mapping[str, PaymentMethod]
     fulfilment: Fulfilment
-    bookings: BookingRepository
-    places: PlaceRepository
+    unit_of_work: Callable[[], UnitOfWork]
     mailer: Mailer
     bus: EventBus
     clock: Callable[[], datetime]
@@ -63,18 +64,11 @@ class BookingService:
         if delivery == "post" and address is None:
             raise MissingAddressError()
 
-        # Payment needs a reference before the booking exists, so the ID
-        # comes first.
-        booking_id = self.new_id()
         method = get_payment_method(payment_method, self.payment_methods)
-
         lines = [_booking_line(code, quantity) for code, quantity in items]
-        self.places.check(lines)
         totals = price_booking(lines, discount_code, delivery)
-        payment = method.charge(totals.total, booking_id, payment_token)
-
         booking = Booking(
-            id=booking_id,
+            id=self.new_id(),
             customer=customer,
             lines=tuple(lines),
             discount_code=discount_code,
@@ -85,22 +79,33 @@ class BookingService:
             total=totals.total,
             vat=totals.vat,
             payment_method=payment_method,
-            payment_reference=payment.reference,
-            status=(
-                BookingStatus.PAID
-                if payment.status is PaymentStatus.PAID
-                else BookingStatus.AWAITING_PAYMENT
-            ),
+            payment_reference="",
+            status=BookingStatus.AWAITING_PAYMENT,
             payment_fee=method.fee(totals.total),
             placed_at=self.clock(),
         )
 
-        # Issue the tickets, now that they are paid for.
-        if booking.status == BookingStatus.PAID:
-            self._issue_tickets(booking)
+        # The places and the booking are kept together, or not at all.
+        with self.unit_of_work() as uow:
+            uow.places.take(booking.lines)
+            uow.bookings.add(booking)
+            uow.commit()
 
-        self.places.take(lines)
-        self.bookings.add(booking)
+        # Nobody else's system is called while a transaction is open.
+        try:
+            payment = method.charge(booking.total, booking.id, payment_token)
+            booking.payment_reference = payment.reference
+            if payment.status is PaymentStatus.PAID:
+                booking.mark_paid()
+                self._issue_tickets(booking)
+        except Exception:
+            self._call_off(booking, method)
+            raise
+
+        with self.unit_of_work() as uow:
+            uow.bookings.save(booking)
+            uow.commit()
+
         self.mailer.send_confirmation(booking, method)
         self.bus.publish(
             BookingConfirmed(
@@ -115,36 +120,44 @@ class BookingService:
 
     def get(self, booking_id: str) -> Booking:
         """The booking with this ID."""
-        return self.bookings.get(booking_id)
+        with self.unit_of_work() as uow:
+            return uow.bookings.get(booking_id)
 
     def mark_paid(self, booking_id: str) -> Booking:
         """The customer's bank transfer has arrived: issue their tickets."""
-        booking = self.bookings.get(booking_id)
-        booking.mark_paid()
-        self._issue_tickets(booking)
-        self.bookings.save(booking)
+        with self.unit_of_work() as uow:
+            booking = uow.bookings.get(booking_id)
+            booking.mark_paid()
+            self._issue_tickets(booking)
+            uow.bookings.save(booking)
+            uow.commit()
         return booking
 
     def check_in(self, booking_id: str) -> Booking:
         """The customer is at the door: let them in."""
-        booking = self.bookings.get(booking_id)
-        booking.check_in()
-        self.bookings.save(booking)
+        with self.unit_of_work() as uow:
+            booking = uow.bookings.get(booking_id)
+            booking.check_in()
+            uow.bookings.save(booking)
+            uow.commit()
         return booking
 
     def cancel(self, booking_id: str) -> Booking:
         """Call a booking off. If it has been paid for, give the money back."""
-        booking = self.bookings.get(booking_id)
-        booking.cancel()
-        if booking.status == BookingStatus.REFUNDED:
-            # Seats first: if the venue says no, nothing has been given back.
-            self.fulfilment.release(booking)
-            method = get_payment_method(
-                booking.payment_method, self.payment_methods
-            )
-            method.refund(booking.payment_reference, booking.total)
-        self.places.give_back(booking.lines)
-        self.bookings.save(booking)
+        with self.unit_of_work() as uow:
+            booking = uow.bookings.get(booking_id)
+            booking.cancel()
+            if booking.status == BookingStatus.REFUNDED:
+                # Seats first: if the venue says no, nothing has been given
+                # back.
+                self.fulfilment.release(booking)
+                method = get_payment_method(
+                    booking.payment_method, self.payment_methods
+                )
+                method.refund(booking.payment_reference, booking.total)
+            uow.places.give_back(booking.lines)
+            uow.bookings.save(booking)
+            uow.commit()
         return booking
 
     def _issue_tickets(self, booking: Booking) -> None:
@@ -153,6 +166,16 @@ class BookingService:
         booking.wallet_pass = issued.wallet_pass
         booking.tracking_number = issued.tracking_number
         booking.invoice_number = issued.invoice_number
+
+    def _call_off(self, booking: Booking, method: PaymentMethod) -> None:
+        """Undo a booking whose payment, or tickets, fell through."""
+        booking.cancel()
+        if booking.status == BookingStatus.REFUNDED:
+            method.refund(booking.payment_reference, booking.total)
+        with self.unit_of_work() as uow:
+            uow.places.give_back(booking.lines)
+            uow.bookings.save(booking)
+            uow.commit()
 
 
 def _booking_line(code: str, quantity: int) -> BookingLine:

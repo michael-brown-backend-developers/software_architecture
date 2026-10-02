@@ -31,12 +31,11 @@ class BookingRepository(Protocol):
 class PlaceRepository(Protocol):
     """The places left for every performance."""
 
-    def check(self, lines: Sequence[BookingLine]) -> None:
-        """Raise NotEnoughPlacesError unless every performance has room."""
-        ...
-
     def take(self, lines: Sequence[BookingLine]) -> None:
-        """Take the places off sale. Call check() first."""
+        """Take the places off sale.
+
+        Raise NotEnoughPlacesError if any performance does not have room.
+        """
         ...
 
     def give_back(self, lines: Sequence[BookingLine]) -> None:

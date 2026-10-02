@@ -5,13 +5,14 @@ to keep the same promises. The PostgreSQL tests are skipped if the
 database is not running.
 """
 
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from fakes import InMemoryBookingRepository
 
-from stagedoor.db import SqlAlchemyBookingRepository, connect
+from stagedoor.db import SqlAlchemyUnitOfWork, connect
 from stagedoor.exceptions import BookingNotFoundError
 from stagedoor.models import (
     Address,
@@ -25,11 +26,13 @@ from stagedoor.repository import BookingRepository
 
 
 @pytest.fixture(params=["memory", "postgres"])
-def repository(request: pytest.FixtureRequest) -> BookingRepository:
+def repository(request: pytest.FixtureRequest) -> Iterator[BookingRepository]:
     if request.param == "memory":
-        return InMemoryBookingRepository()
+        yield InMemoryBookingRepository()
+        return
     database = request.getfixturevalue("database")
-    return SqlAlchemyBookingRepository(connect(database))
+    with SqlAlchemyUnitOfWork(connect(database)) as uow:
+        yield uow.bookings
 
 
 def posted_booking() -> Booking:

@@ -105,6 +105,7 @@ class Booking:
     ``total`` is ``subtotal`` minus ``discount``, plus ``delivery_fee``.
     ``vat`` is the VAT included in ``total``, not added to it. ``status``
     changes as the booking is paid for, used, or cancelled.
+    ``payment_reference`` is empty until the payment has been taken.
     """
 
     id: str

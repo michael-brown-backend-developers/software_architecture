@@ -8,6 +8,7 @@ rather than how.
 from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
+from typing import Self
 
 from stagedoor.capacity import CAPACITY, places_wanted
 from stagedoor.exceptions import (
@@ -87,19 +88,51 @@ class InMemoryPlaceRepository:
     def __init__(self) -> None:
         self.left: dict[str, int] = dict(CAPACITY)
 
-    def check(self, lines: Sequence[BookingLine]) -> None:
-        for performance, quantity in places_wanted(lines).items():
+    def take(self, lines: Sequence[BookingLine]) -> None:
+        wanted = places_wanted(lines)
+        for performance, quantity in wanted.items():
             available = self.left.get(performance, 0)
             if available < quantity:
                 raise NotEnoughPlacesError(performance, quantity, available)
-
-    def take(self, lines: Sequence[BookingLine]) -> None:
-        for performance, quantity in places_wanted(lines).items():
+        for performance, quantity in wanted.items():
             self.left[performance] -= quantity
 
     def give_back(self, lines: Sequence[BookingLine]) -> None:
         for performance, quantity in places_wanted(lines).items():
             self.left[performance] += quantity
+
+
+class InMemoryUnitOfWork:
+    """A transaction over the in-memory repositories.
+
+    It remembers what they held when it started, or last committed, and
+    puts that back unless it is committed.
+    """
+
+    def __init__(
+        self,
+        bookings: InMemoryBookingRepository | None = None,
+        places: InMemoryPlaceRepository | None = None,
+    ) -> None:
+        self.bookings = bookings or InMemoryBookingRepository()
+        self.places = places or InMemoryPlaceRepository()
+
+    def __enter__(self) -> Self:
+        self.commit()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.rollback()
+
+    def commit(self) -> None:
+        self._kept = (dict(self.bookings.bookings), dict(self.places.left))
+
+    def rollback(self) -> None:
+        bookings, left = self._kept
+        self.bookings.bookings.clear()
+        self.bookings.bookings.update(bookings)
+        self.places.left.clear()
+        self.places.left.update(left)
 
 
 def no_sleep(seconds: float) -> None:
