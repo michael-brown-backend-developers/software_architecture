@@ -13,6 +13,7 @@ import logging
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from stagedoor.commands import Command
@@ -54,13 +55,23 @@ class MessageBus:
             elapsed = time.perf_counter() - started
             logger.info("%s took %.3fs", type(message).__name__, elapsed)
 
+    def handlers_for(
+        self, event: object
+    ) -> list[tuple[str, Callable[[Any], None]]]:
+        """Every handler subscribed to this event, with its name."""
+        handlers = self._events[type(event)]
+        return [(_name(handler), handler) for handler in handlers]
+
     def _publish(self, event: object) -> None:
-        for handler in self._events[type(event)]:
+        for name, handler in self.handlers_for(event):
             try:
                 handler(event)
             except Exception:
                 logger.exception(
-                    "%s failed to handle %s",
-                    getattr(handler, "__qualname__", handler),
-                    type(event).__name__,
+                    "%s failed to handle %s", name, type(event).__name__
                 )
+
+
+def _name(handler: Callable[..., object]) -> str:
+    function = handler.func if isinstance(handler, partial) else handler
+    return getattr(function, "__qualname__", repr(function))

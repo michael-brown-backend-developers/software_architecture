@@ -21,7 +21,6 @@ from stagedoor.bootstrap import App, bootstrap
 from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
 from stagedoor.events import BookingConfirmed
 from stagedoor.exceptions import (
-    EmailUnavailableError,
     EmptyBookingError,
     FulfilmentError,
     IllegalTransitionError,
@@ -34,6 +33,7 @@ from stagedoor.exceptions import (
 )
 from stagedoor.models import Address, Booking, BookingStatus, Customer
 from stagedoor.settings import Settings
+from stagedoor.worker import work
 
 
 def book(
@@ -85,6 +85,7 @@ def test_the_customer_is_sent_a_confirmation(
     app: App, ada: Customer, isolated_directories: Path
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    work(app.bus, app.unit_of_work, once=True)
 
     confirmation = mail_about(booking.id, isolated_directories / "mail")
     assert "To: ada@example.com" in confirmation
@@ -181,6 +182,7 @@ def test_a_bank_transfer_confirmation_says_how_to_pay(
     app: App, ada: Customer, isolated_directories: Path
 ) -> None:
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    work(app.bus, app.unit_of_work, once=True)
 
     confirmation = mail_about(booking.id, isolated_directories / "mail")
     assert f"quoting SD-{booking.id.upper()}" in confirmation
@@ -288,6 +290,7 @@ def test_a_booking_is_announced(app: App, ada: Customer) -> None:
     app.bus.subscribe(BookingConfirmed, heard.append)
 
     booking = book(app, ada, [("TEE-STAGEDOOR", 1)], "bank_transfer")
+    work(app.bus, app.unit_of_work, once=True)
 
     assert heard == [
         BookingConfirmed(
@@ -306,9 +309,10 @@ def test_a_reaction_that_fails_does_not_fail_the_booking(
     ada = Customer(name="Ada Lovelace", email="ada+shows@example.com")
 
     booking = book(app, ada, [("MUC0314-ADULT", 2)], "card", "pm_card_visa")
+    work(app.bus, app.unit_of_work, once=True)
 
     assert views.booking(booking.id, app.unit_of_work) == booking
-    assert "award_points failed to handle BookingConfirmed" in caplog.text
+    assert "award_points failed" in caplog.text
 
 
 def test_a_bank_transfer_is_issued_once_it_is_paid(
@@ -485,9 +489,6 @@ def test_a_booking_survives_a_busy_moment_at_the_venue(
     assert len(booking.hold_references) == 1
 
 
-@pytest.mark.xfail(
-    strict=True, raises=EmailUnavailableError, reason="emailed while waiting"
-)
 def test_a_booking_is_made_even_if_the_email_cannot_be_sent(
     app: App, ada: Customer
 ) -> None:

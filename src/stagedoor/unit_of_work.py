@@ -8,17 +8,21 @@ wrong, or because nobody said to - and every change is undone.
 
 from typing import Protocol, Self
 
+from stagedoor.outbox import Outbox
 from stagedoor.repository import BookingRepository, PlaceRepository
 
 
 class UnitOfWork(Protocol):
-    """One transaction's worth of changes to bookings and places."""
+    """One transaction's worth of changes to bookings, places and events."""
 
     @property
     def bookings(self) -> BookingRepository: ...
 
     @property
     def places(self) -> PlaceRepository: ...
+
+    @property
+    def outbox(self) -> Outbox: ...
 
     def __enter__(self) -> Self: ...
 

@@ -12,9 +12,13 @@ from decimal import Decimal
 
 @dataclass(frozen=True)
 class BookingConfirmed:
-    """A booking has been made, and the customer has been told."""
+    """A booking has been made, and paid for if it was paid for by card."""
 
     booking_id: str
     customer_email: str
     total: Decimal
     placed_at: datetime
+
+
+# Every event, by name, so that one can be stored and read back.
+EVENTS: dict[str, type] = {"BookingConfirmed": BookingConfirmed}

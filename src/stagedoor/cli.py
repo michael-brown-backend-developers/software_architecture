@@ -9,6 +9,7 @@ Usage::
     stagedoor check-in 3f9a1c2b7d4e
     stagedoor cancel 3f9a1c2b7d4e
     stagedoor create-tables
+    stagedoor worker [--once]
 """
 
 import argparse
@@ -27,6 +28,7 @@ from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Address, Customer
 from stagedoor.payments.base import PaymentMethod
 from stagedoor.settings import Settings
+from stagedoor.worker import work
 
 
 def _parse_item(text: str) -> tuple[str, int]:
@@ -56,6 +58,12 @@ def _build_parser(
 
     commands.add_parser("whats-on", help="list everything we sell")
     commands.add_parser("create-tables", help="set up an empty database")
+    worker = commands.add_parser(
+        "worker", help="handle the outbox, as messages fall due"
+    )
+    worker.add_argument(
+        "--once", action="store_true", help="stop when nothing is due"
+    )
 
     book = commands.add_parser("book", help="make a booking")
     book.add_argument("--name", required=True)
@@ -101,6 +109,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "create-tables":
             create_tables(settings.database_url)
             print("StageDoor's tables are ready.")
+
+        elif args.command == "worker":
+            work(app.bus, app.unit_of_work, once=args.once)
 
         elif args.command == "whats-on":
             for item in list_items():

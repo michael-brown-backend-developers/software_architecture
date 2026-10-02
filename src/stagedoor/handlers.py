@@ -2,13 +2,17 @@
 
 One function for each command. Each is handed the command, and then,
 by keyword, only what it needs to carry it out - which bootstrap.py fills
-in once, so the bus only ever passes the command. A handler returns the
-events that happened, for the bus to pass on.
+in once, so the bus only ever passes the command. A command's handler
+puts the events that must be handled later in the outbox; it returns any
+that must be handled now, for the bus to pass on.
+
+The events' handlers that belong to booking are here too.
 """
 
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
+from stagedoor import views
 from stagedoor.catalogue import get_item
 from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
 from stagedoor.events import BookingConfirmed
@@ -37,7 +41,6 @@ def make_booking(
     payment_methods: Mapping[str, PaymentMethod],
     fulfilment: Fulfilment,
     unit_of_work: Callable[[], UnitOfWork],
-    mailer: Mailer,
     clock: Callable[[], datetime],
 ) -> list[object]:
     if not command.items:
@@ -85,19 +88,19 @@ def make_booking(
         _call_off(booking, method, unit_of_work)
         raise
 
+    # The booking, and what is to happen because of it, are kept together.
     with unit_of_work() as uow:
         uow.bookings.save(booking)
-        uow.commit()
-
-    mailer.send_confirmation(booking, method)
-    return [
-        BookingConfirmed(
-            booking_id=booking.id,
-            customer_email=booking.customer.email,
-            total=booking.total,
-            placed_at=booking.placed_at,
+        uow.outbox.add(
+            BookingConfirmed(
+                booking_id=booking.id,
+                customer_email=booking.customer.email,
+                total=booking.total,
+                placed_at=booking.placed_at,
+            )
         )
-    ]
+        uow.commit()
+    return []
 
 
 def mark_paid(
@@ -147,6 +150,18 @@ def cancel_booking(
         uow.bookings.save(booking)
         uow.commit()
     return []
+
+
+def send_confirmation(
+    event: BookingConfirmed,
+    *,
+    payment_methods: Mapping[str, PaymentMethod],
+    unit_of_work: Callable[[], UnitOfWork],
+    mailer: Mailer,
+) -> None:
+    booking = views.booking(event.booking_id, unit_of_work)
+    method = get_payment_method(booking.payment_method, payment_methods)
+    mailer.send_confirmation(booking, method)
 
 
 def _issue_tickets(booking: Booking, fulfilment: Fulfilment) -> None:

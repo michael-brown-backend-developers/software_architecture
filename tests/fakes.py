@@ -6,10 +6,13 @@ rather than how.
 """
 
 from collections.abc import Sequence
-from dataclasses import replace
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Self
+from uuid import uuid4
 
 from stagedoor.capacity import CAPACITY, places_wanted
 from stagedoor.exceptions import (
@@ -19,6 +22,7 @@ from stagedoor.exceptions import (
     PaymentFailedError,
 )
 from stagedoor.models import Booking, BookingLine, PaymentStatus
+from stagedoor.outbox import Message
 from stagedoor.payments.base import PaymentResult
 
 DECLINED = "declined"
@@ -103,6 +107,56 @@ class InMemoryPlaceRepository:
             self.left[performance] += quantity
 
 
+@dataclass
+class OutboxEntry:
+    """An event in the in-memory outbox, and how far it has got."""
+
+    event: object
+    due_at: datetime = datetime.min.replace(tzinfo=UTC)
+    attempts: int = 0
+    status: str = "pending"
+    last_error: str | None = None
+    handled: set[str] = field(default_factory=set)
+
+
+class InMemoryOutbox:
+    """Events waiting to be handled, in a dictionary, in the order added."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, OutboxEntry] = {}
+
+    def add(self, event: object) -> None:
+        self.entries[uuid4().hex] = OutboxEntry(event)
+
+    def next_due(self, now: datetime) -> Message | None:
+        for message_id, entry in self.entries.items():
+            if entry.status == "pending" and entry.due_at <= now:
+                return Message(
+                    id=message_id,
+                    event=entry.event,
+                    attempts=entry.attempts,
+                    handled=frozenset(entry.handled),
+                )
+        return None
+
+    def handled(self, message_id: str, handler: str) -> None:
+        self.entries[message_id].handled.add(handler)
+
+    def done(self, message_id: str) -> None:
+        self.entries[message_id].status = "done"
+
+    def failed(
+        self, message_id: str, error: str, retry_at: datetime | None
+    ) -> None:
+        entry = self.entries[message_id]
+        entry.attempts += 1
+        entry.last_error = error
+        if retry_at is None:
+            entry.status = "dead"
+        else:
+            entry.due_at = retry_at
+
+
 class InMemoryUnitOfWork:
     """A transaction over the in-memory repositories.
 
@@ -117,6 +171,7 @@ class InMemoryUnitOfWork:
     ) -> None:
         self.bookings = bookings or InMemoryBookingRepository()
         self.places = places or InMemoryPlaceRepository()
+        self.outbox = InMemoryOutbox()
 
     def __enter__(self) -> Self:
         self.commit()
@@ -126,14 +181,20 @@ class InMemoryUnitOfWork:
         self.rollback()
 
     def commit(self) -> None:
-        self._kept = (dict(self.bookings.bookings), dict(self.places.left))
+        self._kept = (
+            dict(self.bookings.bookings),
+            dict(self.places.left),
+            deepcopy(self.outbox.entries),
+        )
 
     def rollback(self) -> None:
-        bookings, left = self._kept
+        bookings, left, entries = self._kept
         self.bookings.bookings.clear()
         self.bookings.bookings.update(bookings)
         self.places.left.clear()
         self.places.left.update(left)
+        self.outbox.entries.clear()
+        self.outbox.entries.update(deepcopy(entries))
 
 
 def mail_about(booking_id: str, folder: Path) -> str:

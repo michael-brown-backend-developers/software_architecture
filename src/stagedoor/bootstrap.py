@@ -23,6 +23,7 @@ from stagedoor.handlers import (
     check_in,
     make_booking,
     mark_paid,
+    send_confirmation,
 )
 from stagedoor.loyalty import award_points
 from stagedoor.notifications import create_mailer
@@ -74,7 +75,6 @@ def bootstrap(
             payment_methods=payment_methods,
             fulfilment=fulfilment,
             unit_of_work=unit_of_work,
-            mailer=create_mailer(settings),
             clock=clock or now,
         ),
     )
@@ -94,6 +94,15 @@ def bootstrap(
     )
 
     # Everything that happens because a booking was made.
+    bus.subscribe(
+        BookingConfirmed,
+        partial(
+            send_confirmation,
+            payment_methods=payment_methods,
+            unit_of_work=unit_of_work,
+            mailer=create_mailer(settings),
+        ),
+    )
     bus.subscribe(BookingConfirmed, award_points)
     bus.subscribe(BookingConfirmed, record_sale)
     bus.subscribe(BookingConfirmed, notify_sales_team)

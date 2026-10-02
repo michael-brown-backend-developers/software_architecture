@@ -1,19 +1,32 @@
-"""Keeping bookings and places in PostgreSQL, with SQLAlchemy.
+"""Keeping bookings, places and the outbox in PostgreSQL, with SQLAlchemy.
 
 This is the only module in StageDoor that knows SQLAlchemy exists. Each
 Row class is a table, and each attribute a column: a booking is one row in
-bookings, and one row in booking_lines for each thing on it, and each
-performance is one row in performances. The repositories turn bookings
-into rows and back, so nothing outside this module ever sees a row.
+bookings, and one row in booking_lines for each thing on it, each
+performance is one row in performances, and each event waiting to be
+handled is one row in outbox. The repositories turn bookings into rows and
+back, so nothing outside this module ever sees a row.
 """
 
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
-from typing import Self
+from typing import Any, Self
+from uuid import uuid4
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, Numeric, String, update
+from pydantic import TypeAdapter
+from sqlalchemy import (
+    ARRAY,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    func,
+    select,
+    update,
+)
 from sqlalchemy import create_engine as _create_engine
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -24,6 +37,7 @@ from sqlalchemy.orm import (
 )
 
 from stagedoor.capacity import CAPACITY, places_wanted
+from stagedoor.events import EVENTS
 from stagedoor.exceptions import BookingNotFoundError, NotEnoughPlacesError
 from stagedoor.models import (
     Address,
@@ -33,6 +47,7 @@ from stagedoor.models import (
     Customer,
     ItemKind,
 )
+from stagedoor.outbox import Message
 
 Money = Numeric(10, 2)
 
@@ -92,6 +107,32 @@ class PerformanceRow(Base):
     places: Mapped[int]
 
 
+class OutboxRow(Base):
+    __tablename__ = "outbox"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    event_type: Mapped[str]
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    due_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    attempts: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(default="pending")
+    last_error: Mapped[str | None]
+
+
+class HandledRow(Base):
+    __tablename__ = "handled"
+
+    message_id: Mapped[str] = mapped_column(
+        ForeignKey("outbox.id"), primary_key=True
+    )
+    handler: Mapped[str] = mapped_column(primary_key=True)
+
+
 class SqlAlchemyBookingRepository:
     """Bookings, kept in PostgreSQL, in a session it is given."""
 
@@ -140,6 +181,63 @@ class SqlAlchemyPlaceRepository:
             )
 
 
+class SqlAlchemyOutbox:
+    """Events waiting to be handled, in a session it is given."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, event: object) -> None:
+        self.session.add(
+            OutboxRow(
+                id=uuid4().hex,
+                event_type=type(event).__name__,
+                payload=TypeAdapter(type(event)).dump_python(
+                    event, mode="json"
+                ),
+            )
+        )
+
+    def next_due(self, now: datetime) -> Message | None:
+        # SKIP LOCKED passes over any row another worker has claimed.
+        row = self.session.scalars(
+            select(OutboxRow)
+            .where(OutboxRow.status == "pending", OutboxRow.due_at <= now)
+            .order_by(OutboxRow.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        ).one_or_none()
+        if row is None:
+            return None
+        handled = self.session.scalars(
+            select(HandledRow.handler).where(HandledRow.message_id == row.id)
+        )
+        event_type = EVENTS[row.event_type]
+        return Message(
+            id=row.id,
+            event=TypeAdapter(event_type).validate_python(row.payload),
+            attempts=row.attempts,
+            handled=frozenset(handled),
+        )
+
+    def handled(self, message_id: str, handler: str) -> None:
+        self.session.add(HandledRow(message_id=message_id, handler=handler))
+
+    def done(self, message_id: str) -> None:
+        self.session.get_one(OutboxRow, message_id).status = "done"
+
+    def failed(
+        self, message_id: str, error: str, retry_at: datetime | None
+    ) -> None:
+        row = self.session.get_one(OutboxRow, message_id)
+        row.attempts += 1
+        row.last_error = error
+        if retry_at is None:
+            row.status = "dead"
+        else:
+            row.due_at = retry_at
+
+
 class SqlAlchemyUnitOfWork:
     """One PostgreSQL transaction, shared by both repositories."""
 
@@ -150,6 +248,7 @@ class SqlAlchemyUnitOfWork:
         self.session = self.sessions()
         self.bookings = SqlAlchemyBookingRepository(self.session)
         self.places = SqlAlchemyPlaceRepository(self.session)
+        self.outbox = SqlAlchemyOutbox(self.session)
         return self
 
     def __exit__(self, *exc: object) -> None:
