@@ -1,35 +1,61 @@
-"""Passing events to whatever is interested in them.
+"""Passing every command and event to whatever handles it.
 
-Handlers subscribe to a type of event. Publishing an event calls each of
-its handlers in turn. A handler that fails is logged, and the others still
-run: whatever went wrong is not the publisher's problem.
+A command has exactly one handler. If it fails, the sender hears about it.
+An event has any number, including none; one that fails is logged, and the
+others still run, because what happened has happened. Whatever events a
+command's handler returns are handled straight after it.
+
+Everything the bus handles is logged, with how long it took, in this one
+place.
 """
 
 import logging
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
 from collections.abc import Callable
 from typing import Any
+
+from stagedoor.commands import Command
 
 logger = logging.getLogger(__name__)
 
 
-class EventBus:
-    """Calls every handler subscribed to an event when it is published."""
+class MessageBus:
+    """Hands each command to its handler, and each event to its handlers."""
 
     def __init__(self) -> None:
-        self._handlers: defaultdict[type, list[Callable[[Any], None]]] = (
+        self._commands: dict[type, Callable[[Any], list[object]]] = {}
+        self._events: defaultdict[type, list[Callable[[Any], None]]] = (
             defaultdict(list)
         )
+
+    def register[C: Command](
+        self, command_type: type[C], handler: Callable[[C], list[object]]
+    ) -> None:
+        """Make ``handler`` the one that carries out ``command_type``."""
+        self._commands[command_type] = handler
 
     def subscribe[E](
         self, event_type: type[E], handler: Callable[[E], None]
     ) -> None:
-        """Call ``handler`` with every ``event_type`` that is published."""
-        self._handlers[event_type].append(handler)
+        """Call ``handler`` with every ``event_type`` that happens."""
+        self._events[event_type].append(handler)
 
-    def publish(self, event: object) -> None:
-        """Hand ``event`` to every handler subscribed to its type."""
-        for handler in self._handlers[type(event)]:
+    def handle(self, message: object) -> None:
+        """Carry out a command, or pass on an event, and what follows."""
+        queue = deque([message])
+        while queue:
+            message = queue.popleft()
+            started = time.perf_counter()
+            if isinstance(message, Command):
+                queue.extend(self._commands[type(message)](message))
+            else:
+                self._publish(message)
+            elapsed = time.perf_counter() - started
+            logger.info("%s took %.3fs", type(message).__name__, elapsed)
+
+    def _publish(self, event: object) -> None:
+        for handler in self._events[type(event)]:
             try:
                 handler(event)
             except Exception:

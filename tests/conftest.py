@@ -1,6 +1,5 @@
 import os
 from collections.abc import Iterator
-from dataclasses import replace
 from pathlib import Path
 
 import fakeroyalmail
@@ -12,7 +11,6 @@ from fakes import InMemoryPlaceRepository, InMemoryUnitOfWork, no_sleep
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
-from stagedoor.bookings import BookingService
 from stagedoor.bootstrap import App, bootstrap
 from stagedoor.db import Base, create_tables
 from stagedoor.models import Address, Customer
@@ -71,22 +69,16 @@ def settings(isolated_directories: Path) -> Settings:
 
 
 @pytest.fixture
-def app(settings: Settings) -> App:
-    """StageDoor as it runs in development, except that retries never wait."""
-    return bootstrap(settings, sleep=no_sleep)
+def app(settings: Settings, places: InMemoryPlaceRepository) -> App:
+    """StageDoor, keeping everything in memory, and never waiting to retry."""
+    uow = InMemoryUnitOfWork(places=places)
+    return bootstrap(settings, sleep=no_sleep, unit_of_work=lambda: uow)
 
 
 @pytest.fixture
 def places() -> InMemoryPlaceRepository:
     """Every performance, with all of its places."""
     return InMemoryPlaceRepository()
-
-
-@pytest.fixture
-def service(app: App, places: InMemoryPlaceRepository) -> BookingService:
-    """The booking service, keeping its bookings and places in memory."""
-    uow = InMemoryUnitOfWork(places=places)
-    return replace(app.bookings, unit_of_work=lambda: uow)
 
 
 @pytest.fixture(autouse=True)

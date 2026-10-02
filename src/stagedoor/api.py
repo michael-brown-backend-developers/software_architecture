@@ -3,6 +3,9 @@
 Run it with:
 
     poetry run fastapi dev src/stagedoor/api.py
+
+Every route turns a request into a command, and hands it to the bus. What
+StageDoor's errors mean in HTTP is decided once, at the bottom.
 """
 
 import os
@@ -10,22 +13,20 @@ from decimal import Decimal
 from functools import cache
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from stagedoor import views
 from stagedoor.bootstrap import App, bootstrap
+from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
 from stagedoor.exceptions import (
     BookingNotFoundError,
-    EmptyBookingError,
     IllegalTransitionError,
-    InvalidQuantityError,
-    MissingAddressError,
-    MissingPaymentTokenError,
+    NotEnoughPlacesError,
     PaymentFailedError,
-    UnknownDeliveryOptionError,
-    UnknownDiscountCodeError,
-    UnknownItemError,
-    UnknownPaymentMethodError,
+    StageDoorError,
+    TransientError,
 )
 from stagedoor.models import Address, Booking, Customer
 from stagedoor.settings import Settings
@@ -83,69 +84,65 @@ class BookingOut(BaseModel):
 @api.post("/bookings", status_code=201)
 def make_booking(request: BookingRequest, app: StageDoor) -> BookingOut:
     address = request.address
-    customer = Customer(
-        name=request.name,
-        email=request.email,
-        address=Address(**address.model_dump()) if address else None,
+    command = MakeBooking(
+        customer=Customer(
+            name=request.name,
+            email=request.email,
+            address=Address(**address.model_dump()) if address else None,
+        ),
+        items=tuple(request.items.items()),
+        payment_method=request.payment_method,
+        payment_token=request.payment_token,
+        discount_code=request.discount_code,
+        delivery=request.delivery,
     )
-    try:
-        booking = app.bookings.place(
-            customer,
-            list(request.items.items()),
-            payment_method=request.payment_method,
-            payment_token=request.payment_token,
-            discount_code=request.discount_code,
-            delivery=request.delivery,
-        )
-    except PaymentFailedError as error:
-        raise HTTPException(402, str(error)) from None
-    except (
-        EmptyBookingError,
-        InvalidQuantityError,
-        MissingAddressError,
-        MissingPaymentTokenError,
-        UnknownDeliveryOptionError,
-        UnknownDiscountCodeError,
-        UnknownItemError,
-        UnknownPaymentMethodError,
-    ) as error:
-        raise HTTPException(422, str(error)) from None
-    return BookingOut.of(booking)
+    app.bus.handle(command)
+    return BookingOut.of(views.booking(command.booking_id, app.unit_of_work))
 
 
 @api.get("/bookings/{booking_id}")
 def get_booking(booking_id: str, app: StageDoor) -> BookingOut:
-    try:
-        return BookingOut.of(app.bookings.get(booking_id))
-    except BookingNotFoundError as error:
-        raise HTTPException(404, str(error)) from None
+    return BookingOut.of(views.booking(booking_id, app.unit_of_work))
 
 
 @api.post("/bookings/{booking_id}/paid")
 def mark_paid(booking_id: str, app: StageDoor) -> BookingOut:
-    try:
-        return BookingOut.of(app.bookings.mark_paid(booking_id))
-    except BookingNotFoundError as error:
-        raise HTTPException(404, str(error)) from None
-    except IllegalTransitionError as error:
-        raise HTTPException(409, str(error)) from None
+    app.bus.handle(MarkPaid(booking_id))
+    return BookingOut.of(views.booking(booking_id, app.unit_of_work))
 
 
 @api.post("/bookings/{booking_id}/check-in")
 def check_in(booking_id: str, app: StageDoor) -> BookingOut:
-    try:
-        return BookingOut.of(app.bookings.check_in(booking_id))
-    except BookingNotFoundError as error:
-        raise HTTPException(404, str(error)) from None
-    except IllegalTransitionError as error:
-        raise HTTPException(409, str(error)) from None
+    app.bus.handle(CheckIn(booking_id))
+    return BookingOut.of(views.booking(booking_id, app.unit_of_work))
 
 
 @api.post("/bookings/{booking_id}/cancel")
 def cancel(booking_id: str, app: StageDoor) -> BookingOut:
-    try:
-        return BookingOut.of(app.bookings.cancel(booking_id))
-    except BookingNotFoundError as error:
-        raise HTTPException(404, str(error)) from None
-    except IllegalTransitionError as error:
-        raise HTTPException(409, str(error)) from None
+    app.bus.handle(CancelBooking(booking_id))
+    return BookingOut.of(views.booking(booking_id, app.unit_of_work))
+
+
+# What each of StageDoor's errors means in HTTP. Anything else StageDoor
+# refuses is a request it cannot carry out: a 422.
+STATUS_CODES: dict[type[StageDoorError], int] = {
+    BookingNotFoundError: 404,
+    IllegalTransitionError: 409,
+    NotEnoughPlacesError: 409,
+    PaymentFailedError: 402,
+    TransientError: 503,
+}
+
+
+@api.exception_handler(StageDoorError)
+def refuse(request: Request, error: StageDoorError) -> JSONResponse:
+    """Turn any of StageDoor's errors into an HTTP response."""
+    status = next(
+        (
+            code
+            for kind, code in STATUS_CODES.items()
+            if isinstance(error, kind)
+        ),
+        422,
+    )
+    return JSONResponse({"detail": str(error)}, status_code=status)

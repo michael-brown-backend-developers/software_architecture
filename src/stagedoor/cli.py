@@ -17,8 +17,10 @@ import os
 import sys
 from collections.abc import Mapping
 
+from stagedoor import views
 from stagedoor.bootstrap import bootstrap
 from stagedoor.catalogue import list_items
+from stagedoor.commands import CancelBooking, CheckIn, MakeBooking, MarkPaid
 from stagedoor.db import create_tables
 from stagedoor.delivery import DELIVERY_PRICING
 from stagedoor.exceptions import StageDoorError
@@ -105,32 +107,35 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{item.code:<14} £{item.price:>6}  {item.name}")
 
         elif args.command == "book":
-            booking = app.bookings.place(
-                Customer(
+            command = MakeBooking(
+                customer=Customer(
                     name=args.name, email=args.email, address=args.address
                 ),
-                args.items,
+                items=tuple(args.items),
                 payment_method=args.pay,
                 payment_token=args.token,
                 discount_code=args.discount,
                 delivery=args.delivery,
             )
+            app.bus.handle(command)
+            booking = views.booking(command.booking_id, app.unit_of_work)
             print(f"Booking {booking.id} confirmed. Total: £{booking.total}")
 
         elif args.command == "paid":
-            booking = app.bookings.mark_paid(args.booking_id)
-            print(f"Booking {booking.id} is paid. Tickets issued.")
+            app.bus.handle(MarkPaid(args.booking_id))
+            print(f"Booking {args.booking_id} is paid. Tickets issued.")
 
         elif args.command == "check-in":
-            booking = app.bookings.check_in(args.booking_id)
-            print(f"Booking {booking.id} checked in. Enjoy the show.")
+            app.bus.handle(CheckIn(args.booking_id))
+            print(f"Booking {args.booking_id} checked in. Enjoy the show.")
 
         elif args.command == "cancel":
-            booking = app.bookings.cancel(args.booking_id)
+            app.bus.handle(CancelBooking(args.booking_id))
+            booking = views.booking(args.booking_id, app.unit_of_work)
             print(f"Booking {booking.id} is {booking.status}.")
 
         elif args.command == "booking":
-            booking = app.bookings.get(args.booking_id)
+            booking = views.booking(args.booking_id, app.unit_of_work)
             customer = booking.customer
             print(
                 f"Booking {booking.id} for {customer.name} <{customer.email}>"

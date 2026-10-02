@@ -5,10 +5,11 @@ Run it with the database up:
     poetry run python scripts/race.py
 
 Each terminal is a thread with its own StageDoor, sharing only the
-database, as two real terminals would. A bank transfer is usually quick, so
-each terminal's takes half a second here, as a card payment might: that is
-all the time the two need to overlap. Confirmations go to a temporary
-directory, and nothing else reacts to the bookings.
+database, as two real terminals would, and everything else they write
+goes to temporary directories. A
+bank transfer is usually quick, so each terminal's takes half a second
+here, as a card payment might: that is all the time the two need to
+overlap.
 """
 
 import os
@@ -22,10 +23,11 @@ from pathlib import Path
 from sqlalchemy import update
 
 from stagedoor.bootstrap import bootstrap
-from stagedoor.bus import EventBus
+from stagedoor.commands import MakeBooking
 from stagedoor.db import PerformanceRow, connect, create_tables
 from stagedoor.exceptions import StageDoorError
 from stagedoor.models import Booking, Customer
+from stagedoor.payments import create_payment_method
 from stagedoor.payments.base import PaymentMethod, PaymentResult
 from stagedoor.settings import Settings
 
@@ -53,26 +55,25 @@ class SlowPayment:
 
 
 def terminal(name: str, settings: Settings) -> None:
-    app = bootstrap(settings)
-    slow = SlowPayment(app.payment_methods["bank_transfer"])
-    service = replace(
-        app.bookings, payment_methods={"bank_transfer": slow}, bus=EventBus()
+    mail = Path(tempfile.mkdtemp(prefix=f"stagedoor-{name.lower()}-"))
+    settings = replace(settings, mail_dir=mail)
+    slow = SlowPayment(create_payment_method("bank_transfer", settings))
+    app = bootstrap(settings, payment_methods={"bank_transfer": slow})
+    command = MakeBooking(
+        customer=Customer(name=name, email=f"{name.lower()}@example.com"),
+        items=(("GDF0320-ADULT", 2),),
+        payment_method="bank_transfer",
     )
-    customer = Customer(name=name, email=f"{name.lower()}@example.com")
     try:
-        booking = service.place(
-            customer, [("GDF0320-ADULT", 2)], "bank_transfer"
-        )
-        print(f"{name}: booking {booking.id} confirmed.")
+        app.bus.handle(command)
+        print(f"{name}: booking {command.booking_id} confirmed.")
     except StageDoorError as error:
         print(f"{name}: {error}")
 
 
 def main() -> None:
-    settings = replace(
-        Settings.from_env(os.environ),
-        mail_dir=Path(tempfile.mkdtemp(prefix="stagedoor-race-")),
-    )
+    os.environ["STAGEDOOR_DATA_DIR"] = tempfile.mkdtemp(prefix="stagedoor-")
+    settings = Settings.from_env(os.environ)
     create_tables(settings.database_url)
     with connect(settings.database_url)() as session:
         session.execute(

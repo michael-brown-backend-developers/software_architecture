@@ -1,20 +1,16 @@
 from collections.abc import Iterator
-from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from stagedoor.api import api, stagedoor
-from stagedoor.bookings import BookingService
 from stagedoor.bootstrap import App
 
 
 @pytest.fixture
-def client(app: App, service: BookingService) -> Iterator[TestClient]:
+def client(app: App) -> Iterator[TestClient]:
     """The API, with StageDoor keeping everything in memory."""
-    api.dependency_overrides[stagedoor] = lambda: replace(
-        app, bookings=service
-    )
+    api.dependency_overrides[stagedoor] = lambda: app
     yield TestClient(api, raise_server_exceptions=False)
     api.dependency_overrides.clear()
 
@@ -86,7 +82,6 @@ def test_a_declined_card_is_explained(client: TestClient) -> None:
     assert response.json() == {"detail": "Your card was declined."}
 
 
-@pytest.mark.xfail(strict=True, reason="a 500, mapped in one route only")
 def test_selling_places_we_do_not_have_is_refused(client: TestClient) -> None:
     response = client.post(
         "/bookings",
